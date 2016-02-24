@@ -9,6 +9,9 @@
  */
 var jwt = require('jsonwebtoken');
 var fs = require('fs');
+
+//TODO - get a fresh copy of this file each time
+//we deploy this function
 var certs = JSON.parse(fs.readFileSync('certs.json'));
 
 function generatePolicyDocument(principalId, effect, resource) {
