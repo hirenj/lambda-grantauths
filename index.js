@@ -9,7 +9,7 @@
  */
 var jwt = require('jsonwebtoken');
 var fs = require('fs');
-var cert = fs.readFileSync('cert.pem');
+var certs = JSON.parse(fs.readFileSync('certs.json'));
 
 function generatePolicyDocument(principalId, effect, resource) {
 	var authResponse = {};
@@ -37,7 +37,8 @@ exports.handler = function jwtHandler(event, context){
 	if(token[0] === 'Bearer'){
 		// Token-based re-authorization
 		// Verify
-		jwt.verify(token[1], cert, function(err, data){
+		var cert_id = jwt.decode(token[1],{complete: true}).header.kid;
+		jwt.verify(token[1], certs[cert_id], function(err, data){
 			if(err){
 				console.log('Verification Failure', err);
 				context.fail('Unauthorized');
