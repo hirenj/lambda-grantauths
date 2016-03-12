@@ -49,6 +49,9 @@ function generatePolicyDocument(principalId, effect, resource) {
 // membership would have to be some auto-generated policies, or use
 // a custom authorizer to add extra permissions.
 
+// TODO - test whether the policies here can restrict / expand on execution
+// roles
+
 /**
  * Handle requests from API Gateway
  * "event" is an object with an "authorizationToken"
