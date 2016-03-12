@@ -5,9 +5,6 @@
 'use strict';
 module.exports = function(grunt) {
 	require('load-grunt-tasks')(grunt);
-	if(grunt.option('account-id') === undefined){
-		return grunt.fail.fatal('--acount-id is required', 1);
-	}
 
 	var path = require('path');
 	grunt.initConfig({
@@ -28,7 +25,8 @@ module.exports = function(grunt) {
 					file_name: 'index.js',
 					handler: 'handler',
 				},
-				arn: 'arn:aws:lambda:us-east-1:' + grunt.option('account-id') + ':function:jwtAuthorize',
+				function: 'jwtAuthorize',
+				arn: null,
 			},
 		},
 		lambda_package: {
