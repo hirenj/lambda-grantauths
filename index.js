@@ -65,6 +65,13 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	// get the other tabs to know about the grant. Same deal in the
 	// opposite direction too.
 	// Provide capacity to re-build
+
+	// Doesn't the signing key only have to reside on the server-side?
+	// We just store the encrypted key on S3, restrict access to the function
+	// and then decrypt it whenever we do a login.
+	// The public key is fine to remain public, and we simply switch accross
+	// from one key to another every few hours. Certificate never leaves
+	// data center, and we can ensure that we are signing the tokens.
 };
 
 var accept_openid_connect_token = function(token,context) {
