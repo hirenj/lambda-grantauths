@@ -13,7 +13,7 @@ module.exports = function(grunt) {
 				package: 'jwtAuthorize',
 				options: {
 					file_name: 'index.js',
-					handler: 'handler',
+					handler: 'loginhandler',
 					event: 'event.json',
 				},
 			}
@@ -23,7 +23,7 @@ module.exports = function(grunt) {
 				package: 'jwtAuthorize',
 				options: {
 					file_name: 'index.js',
-					handler: 'handler',
+					handler: 'loginhandler',
 				},
 				function: 'jwtAuthorize',
 				arn: null,
