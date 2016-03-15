@@ -31,6 +31,28 @@ function generatePolicyDocument(principalId, effect, resource) {
 	return authResponse;
 }
 
+var summarise_sets = function(grants) {
+	var datasets = {};
+	grants.forEach(function(grant) {
+		(grant.sets || '').split(',').forEach(function(set) {
+			if (! datasets[set]) {
+				datasets[set] = [];
+			}
+			grant.protein = grant.protein || '';
+			if (grant.protein == 'any') {
+				datasets[set] = ['*'];
+			} else if (datasets[set][0] !== '*') {
+				grant.protein.split(',').forEach(function(prot) {
+					if (datasets[set].indexOf(prot) < 0) {
+						datasets[set] = datasets[set].concat([prot]);
+					}
+				});
+			}
+		});
+	});
+	return datasets;
+};
+
 // We should have one function to check that the JWT from google
 // properly identifies the user, and then the lambda function that
 // this wraps around creates a new access token (another jwt) that
@@ -52,13 +74,67 @@ function generatePolicyDocument(principalId, effect, resource) {
 // TODO - test whether the policies here can restrict / expand on execution
 // roles
 
+// Make sure we pass the Authorisation header along.
+// http://stackoverflow.com/a/31375476
+
+// Wire up to API endpoint
 exports.exchangetoken = function exchangetoken(event,context) {
 	// Read the current JWT
+	console.log(JSON.stringify(event));
+	var token = event.Authorization.split(' ');
+	if(token[0] !== 'Bearer') {
+		context.fail('Unauthorized');
+	}
+
+	var current_token = jwt.decode(token[1],{complete: true});
+	var AWS = require('aws-sdk');
+	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
+
+	var user_id = current_token.payload.sub;
+
+	var params = {
+		TableName : "grants",
+		ProjectionExpression : "datasets,proteins,valid_from,valid_to",
+		FilterExpression: "contains(#usr,:userid)",
+		ExpressionAttributeNames:{
+		    "#usr": "users"
+		},
+		ExpressionAttributeValues: {
+		    ":userid": { 'S' : "googleuser-"+user_id }
+		}
+	};
+	dynamo.scan(params,function(err,data) {
+		var sets = [];
+		var earliest_expiry = Math.floor((new Date()).getTime() / 1000);
+
+		// Add a day to the expiry time, but we should
+		// be doing this depending on the user that is
+		// being supplied to us
+
+		earliest_expiry = earliest_expiry + 86400;
+
+		data.Items.forEach(function(grant) {
+			if (grant.valid_to.N < earliest_expiry ) {
+				earliest_expiry = grant.valid_to.N;
+			}
+			sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
+		});
+		var summary_grant = summarise_sets(sets);
+		var token_content = {
+			'access' : summary_grant,
+			'expires' : earliest_expiry,
+			'user' : "googleuser-"+user_id,
+		};
+		context.succeed(token_content);
+	});
+
 	// Read the capabilities from the grants table for the user
 	// Encode into new JWT
-	// Hash JWT to get the new access_token
-	// Store the JWT so that we can look-up rights easily (without
-	// dicking around in the grants table etc).
+
+	//  Depending on performance - ( Hash JWT to get the new access_token )
+	//  Depending on performance - ( Store the JWT so that we can look-up rights easily (without
+	// dicking around in the grants table etc). )
+
 	// what happens when a user has a new set of capabilities
 	// while the current set is still valid? i.e. the user accepts
 	// a grant to read some data in one browser tab, we should
