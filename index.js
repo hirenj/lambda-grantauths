@@ -53,6 +53,18 @@ var summarise_sets = function(grants) {
 	return datasets;
 };
 
+var get_signing_key = function(callback) {
+	var NodeRSA = require('node-rsa');
+	var uuid = require('node-uuid');
+	var key_id = uuid.v4();
+	var key = new NodeRSA({b: 512 });
+	var AWS = require('aws-sdk');
+	var s3 = new AWS.S3({region:'us-east-1'});
+	s3.putObject({'Bucket' : 'test-gator', 'Key': 'pubkeys/'+key_id, 'Body': key.exportKey('pkcs1-public-pem')},function(err,result) {
+	});
+	callback(null,{'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')});
+};
+
 // We should have one function to check that the JWT from google
 // properly identifies the user, and then the lambda function that
 // this wraps around creates a new access token (another jwt) that
@@ -89,7 +101,10 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	var current_token = jwt.decode(token[1],{complete: true});
 	var AWS = require('aws-sdk');
 	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
-
+	if (current_token.payload.user) {
+		context.succeed("Already exchanged");
+		return;
+	}
 	var user_id = current_token.payload.sub;
 
 	var params = {
@@ -125,8 +140,14 @@ exports.exchangetoken = function exchangetoken(event,context) {
 			'expires' : earliest_expiry,
 			'user' : "googleuser-"+user_id,
 		};
-		context.succeed(token_content);
+
+		get_signing_key(function(err,key) {
+			jwt.sign(token_content,key.private,{'algorithm' : 'RS256', 'headers' : { 'kid' : key.kid } }, function(token) {
+				context.succeed(token);
+			});
+		});
 	});
+
 
 	// Read the capabilities from the grants table for the user
 	// Encode into new JWT
@@ -153,7 +174,7 @@ exports.exchangetoken = function exchangetoken(event,context) {
 var accept_openid_connect_token = function(token,context) {
 	console.log("Trying to validate bearer "+token);
 	var cert_id = jwt.decode(token,{complete: true}).header.kid;
-	jwt.verify(token, certs[cert_id], function(err, data){
+	jwt.verify(token, certs[cert_id], { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
 		if(err){
 			console.log('Verification Failure', err);
 			context.fail('Unauthorized');
@@ -168,6 +189,28 @@ var accept_openid_connect_token = function(token,context) {
 	});
 };
 
+var accept_self_token = function(token,context) {
+	console.log("Trying to validate bearer "+token);
+	var cert_id = jwt.decode(token,{complete: true}).header.kid;
+	var AWS = require('aws-sdk');
+	var s3 = new AWS.S3({region:'us-east-1'});
+	s3.getObject({'Bucket' : 'test-gator', 'Key': 'pubkeys/'+cert_id},function(err,result) {
+		jwt.verify(token, result, { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
+			if(err){
+				console.log('Verification Failure', err);
+				context.fail('Unauthorized');
+			} else if (data && data.user){
+				console.log('LOGIN', data);
+				// Restrict the functions to only the token exchange user
+				context.succeed(generatePolicyDocument(data.sub, 'Allow', event.methodArn));
+			} else {
+				console.log('Invalid User', data);
+				context.fail('Unauthorized');
+			}
+		});
+	});
+};
+
 /**
  * Handle requests from API Gateway
  * "event" is an object with an "authorizationToken"
@@ -175,8 +218,12 @@ var accept_openid_connect_token = function(token,context) {
 exports.loginhandler = function jwtHandler(event, context){
 	var token = event.authorizationToken.split(' ');
 	if(token[0] === 'Bearer'){
-		// Check that this is a openid connect kind of token
-		accept_openid_connect_token(token[1],context);
+		if (jwt.decode(token).user) {
+			accept_self_token(token[1],context);
+		} else {
+			// Check that this is a openid connect kind of token
+			accept_openid_connect_token(token[1],context);
+		}
 
 		// Otherwise it's one of our own tokens that we need to check
 
