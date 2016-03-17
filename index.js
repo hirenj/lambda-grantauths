@@ -59,10 +59,12 @@ var get_signing_key = function(callback) {
 	var key_id = uuid.v4();
 	var key = new NodeRSA({b: 512 });
 	var AWS = require('aws-sdk');
-	var s3 = new AWS.S3({region:'us-east-1'});
-	s3.putObject({'Bucket' : 'test-gator', 'Key': 'pubkeys/'+key_id, 'Body': key.exportKey('pkcs1-public-pem')},function(err,result) {
+	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
+	var item = {};
+
+	dynamo.putItem({'TableName' :'pubkeys', 'Item' : { kid: { S: key_id }, key: { S: key.exportKey('pkcs1-public-pem') } } },function(err,result) {
+		callback(null,{'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')});
 	});
-	callback(null,{'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')});
 };
 
 var get_userid_from_token = function(authorization,context) {
@@ -217,20 +219,26 @@ var accept_self_token = function(token,event,context,anonymous) {
 	var cert_id = decoded.header.kid;
 
 	var AWS = require('aws-sdk');
-	var s3 = new AWS.S3({region:'us-east-1'});
+	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
+	var params = {
+		AttributesToGet: [ "key" ],
+		TableName : 'pubkeys',
+		Key : { "kid" : { "S" : cert_id } }
+    };
 
 	// FIXME - We should be checking timestamps on the JWT
 	// so that we aren't accepting ancient tokens, just
 	// in case someone tries to do that.
 
-	s3.getObject({'Bucket' : 'test-gator', 'Key': 'pubkeys/'+cert_id},function(err,result) {
+	dynamo.getItem(params,function(err,result) {
+		console.log(result);
 		if (err) {
 			console.error(err);
 			console.error(err.stack);
 			context.fail('Unauthorized (invalid key)');
 			return;
 		}
-		jwt.verify(token, result.Body, { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
+		jwt.verify(token, result.Item.key.S, { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
 			if(err){
 				console.log('Verification Failure', err);
 				context.fail('Unauthorized');
