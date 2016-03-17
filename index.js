@@ -135,6 +135,8 @@ exports.exchangetoken = function exchangetoken(event,context) {
 			sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
 		});
 		var summary_grant = summarise_sets(sets);
+
+		// FIXME - Use more JWT-like names for the content of the token
 		var token_content = {
 			'access' : summary_grant,
 			'expires' : earliest_expiry,
@@ -174,6 +176,11 @@ exports.exchangetoken = function exchangetoken(event,context) {
 var accept_openid_connect_token = function(token,context) {
 	console.log("Trying to validate bearer "+token);
 	var cert_id = jwt.decode(token,{complete: true}).header.kid;
+
+	// FIXME - We should be checking timestamps on the JWT
+	// we shouldn't be accepting ancient tokens too, just
+	// in case someone tries to do that.
+
 	jwt.verify(token, certs[cert_id], { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
 		if(err){
 			console.log('Verification Failure', err);
@@ -194,6 +201,11 @@ var accept_self_token = function(token,context) {
 	var cert_id = jwt.decode(token,{complete: true}).header.kid;
 	var AWS = require('aws-sdk');
 	var s3 = new AWS.S3({region:'us-east-1'});
+
+	// FIXME - We should be checking timestamps on the JWT
+	// we shouldn't be accepting ancient tokens too, just
+	// in case someone tries to do that.
+
 	s3.getObject({'Bucket' : 'test-gator', 'Key': 'pubkeys/'+cert_id},function(err,result) {
 		jwt.verify(token, result, { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
 			if(err){
@@ -219,14 +231,12 @@ exports.loginhandler = function jwtHandler(event, context){
 	var token = event.authorizationToken.split(' ');
 	if(token[0] === 'Bearer'){
 		if (jwt.decode(token).user) {
+			// This is one of our own tokens
 			accept_self_token(token[1],context);
 		} else {
 			// Check that this is a openid connect kind of token
 			accept_openid_connect_token(token[1],context);
 		}
-
-		// Otherwise it's one of our own tokens that we need to check
-
 	} else {
 		// Require a "Bearer" token
 		console.log('Wrong token type', token[0]);
