@@ -65,6 +65,32 @@ var get_signing_key = function(callback) {
 	callback(null,{'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')});
 };
 
+var get_userid_from_token = function(authorization,context) {
+	if ( ! authorization ) {
+		return "anonymous";
+	}
+	var token = authorization.split(' ');
+
+	if(token[0] !== 'Bearer') {
+		context.fail('Unauthorized');
+	}
+
+	var current_token = jwt.decode(token[1],{complete: true});
+
+	if (current_token.payload.iss == 'glycodomain') {
+		context.succeed("Already exchanged");
+		// FIXME - Or we're doing a refresh on an expired token,
+		// and we should simply transfer the grants over.
+		return;
+	}
+	var user_id = current_token.payload.sub;
+	if (current_token.payload.iss === 'accounts.google.com') {
+		user_id = 'googleuser-'+user_id;
+	}
+
+	return user_id;
+};
+
 // We should have one function to check that the JWT from google
 // properly identifies the user, and then the lambda function that
 // this wraps around creates a new access token (another jwt) that
@@ -93,19 +119,15 @@ var get_signing_key = function(callback) {
 exports.exchangetoken = function exchangetoken(event,context) {
 	// Read the current JWT
 	console.log(JSON.stringify(event));
-	var token = event.Authorization.split(' ');
-	if(token[0] !== 'Bearer') {
-		context.fail('Unauthorized');
-	}
 
-	var current_token = jwt.decode(token[1],{complete: true});
-	var AWS = require('aws-sdk');
-	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
-	if (current_token.payload.user) {
-		context.succeed("Already exchanged");
+	var user_id = get_userid_from_token(event.Authorization);
+	if ( ! user_id ) {
 		return;
 	}
-	var user_id = current_token.payload.sub;
+
+	var AWS = require('aws-sdk');
+	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
+
 
 	var params = {
 		TableName : "grants",
@@ -115,7 +137,7 @@ exports.exchangetoken = function exchangetoken(event,context) {
 		    "#usr": "users"
 		},
 		ExpressionAttributeValues: {
-		    ":userid": { 'S' : "googleuser-"+user_id }
+		    ":userid": { 'S' : user_id }
 		}
 	};
 	dynamo.scan(params,function(err,data) {
@@ -136,11 +158,11 @@ exports.exchangetoken = function exchangetoken(event,context) {
 		});
 		var summary_grant = summarise_sets(sets);
 
-		// FIXME - Use more JWT-like names for the content of the token
 		var token_content = {
 			'access' : summary_grant,
-			'expires' : earliest_expiry,
-			'user' : "googleuser-"+user_id,
+			'iss' : 'glycodomain',
+			'exp' : earliest_expiry,
+			'sub' : user_id,
 		};
 
 		get_signing_key(function(err,key) {
@@ -154,9 +176,6 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	// Read the capabilities from the grants table for the user
 	// Encode into new JWT
 
-	//  Depending on performance - ( Hash JWT to get the new access_token )
-	//  Depending on performance - ( Store the JWT so that we can look-up rights easily (without
-	// dicking around in the grants table etc). )
 
 	// what happens when a user has a new set of capabilities
 	// while the current set is still valid? i.e. the user accepts
@@ -164,13 +183,6 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	// get the other tabs to know about the grant. Same deal in the
 	// opposite direction too.
 	// Provide capacity to re-build
-
-	// Doesn't the signing key only have to reside on the server-side?
-	// We just store the encrypted key on S3, restrict access to the function
-	// and then decrypt it whenever we do a login.
-	// The public key is fine to remain public, and we simply switch accross
-	// from one key to another every few hours. Certificate never leaves
-	// data center, and we can ensure that we are signing the tokens.
 };
 
 var accept_openid_connect_token = function(token,context) {
@@ -178,7 +190,7 @@ var accept_openid_connect_token = function(token,context) {
 	var cert_id = jwt.decode(token,{complete: true}).header.kid;
 
 	// FIXME - We should be checking timestamps on the JWT
-	// we shouldn't be accepting ancient tokens too, just
+	// so that we aren't accepting ancient tokens, just
 	// in case someone tries to do that.
 
 	jwt.verify(token, certs[cert_id], { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
@@ -196,14 +208,16 @@ var accept_openid_connect_token = function(token,context) {
 	});
 };
 
-var accept_self_token = function(token,context) {
+var accept_self_token = function(token,context,anonymous) {
 	console.log("Trying to validate bearer "+token);
-	var cert_id = jwt.decode(token,{complete: true}).header.kid;
+	var decoded = jwt.decode(token,{complete: true});
+	var cert_id = decoded.header.kid;
+
 	var AWS = require('aws-sdk');
 	var s3 = new AWS.S3({region:'us-east-1'});
 
 	// FIXME - We should be checking timestamps on the JWT
-	// we shouldn't be accepting ancient tokens too, just
+	// so that we aren't accepting ancient tokens, just
 	// in case someone tries to do that.
 
 	s3.getObject({'Bucket' : 'test-gator', 'Key': 'pubkeys/'+cert_id},function(err,result) {
@@ -211,7 +225,7 @@ var accept_self_token = function(token,context) {
 			if(err){
 				console.log('Verification Failure', err);
 				context.fail('Unauthorized');
-			} else if (data && data.user){
+			} else if (data && data.sub && (! anonymous && data.sub !== 'anonymous') || (data.sub === 'anonymous' && anonymous) ){
 				console.log('LOGIN', data);
 				// Restrict the functions to only the token exchange user
 				context.succeed(generatePolicyDocument(data.sub, 'Allow', event.methodArn));
@@ -230,9 +244,17 @@ var accept_self_token = function(token,context) {
 exports.loginhandler = function jwtHandler(event, context){
 	var token = event.authorizationToken.split(' ');
 	if(token[0] === 'Bearer'){
-		if (jwt.decode(token).user) {
+		var decoded_token = jwt.decode(token[1]);
+		if (! decoded_token.exp || decoded_token.exp < Math.floor((new Date()).getTime() / 1000)) {
+			context.fail('Expired');
+			return;
+		}
+		if (decoded_token.iss == 'glycodomain' && decoded_token.sub !== 'anonymous') {
 			// This is one of our own tokens
 			accept_self_token(token[1],context);
+		} else if (decoded_token.iss === 'glycodomain' && decoded_token.sub === 'anonymous') {
+			// This is also one of our own tokens
+			accept_self_token(token[1],context,'anonymous');
 		} else {
 			// Check that this is a openid connect kind of token
 			accept_openid_connect_token(token[1],context);
