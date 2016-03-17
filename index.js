@@ -120,7 +120,10 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	// Read the current JWT
 	console.log(JSON.stringify(event));
 
-	var user_id = get_userid_from_token(event.Authorization);
+	var user_id = get_userid_from_token(event.Authorization,context);
+
+	console.log(user_id);
+
 	if ( ! user_id ) {
 		return;
 	}
@@ -185,8 +188,8 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	// Provide capacity to re-build
 };
 
-var accept_openid_connect_token = function(token,context) {
-	console.log("Trying to validate bearer "+token);
+var accept_openid_connect_token = function(token,event,context) {
+	console.log("Trying to validate bearer on openid token "+token);
 	var cert_id = jwt.decode(token,{complete: true}).header.kid;
 
 	// FIXME - We should be checking timestamps on the JWT
@@ -208,8 +211,8 @@ var accept_openid_connect_token = function(token,context) {
 	});
 };
 
-var accept_self_token = function(token,context,anonymous) {
-	console.log("Trying to validate bearer "+token);
+var accept_self_token = function(token,event,context,anonymous) {
+	console.log("Trying to validate bearer on self token "+token);
 	var decoded = jwt.decode(token,{complete: true});
 	var cert_id = decoded.header.kid;
 
@@ -221,7 +224,13 @@ var accept_self_token = function(token,context,anonymous) {
 	// in case someone tries to do that.
 
 	s3.getObject({'Bucket' : 'test-gator', 'Key': 'pubkeys/'+cert_id},function(err,result) {
-		jwt.verify(token, result, { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
+		if (err) {
+			console.error(err);
+			console.error(err.stack);
+			context.fail('Unauthorized (invalid key)');
+			return;
+		}
+		jwt.verify(token, result.Body, { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
 			if(err){
 				console.log('Verification Failure', err);
 				context.fail('Unauthorized');
@@ -249,15 +258,15 @@ exports.loginhandler = function jwtHandler(event, context){
 			context.fail('Expired');
 			return;
 		}
-		if (decoded_token.iss == 'glycodomain' && decoded_token.sub !== 'anonymous') {
+		if (decoded_token.iss === 'glycodomain' && decoded_token.sub !== 'anonymous') {
 			// This is one of our own tokens
-			accept_self_token(token[1],context);
+			accept_self_token(token[1],event,context);
 		} else if (decoded_token.iss === 'glycodomain' && decoded_token.sub === 'anonymous') {
 			// This is also one of our own tokens
-			accept_self_token(token[1],context,'anonymous');
+			accept_self_token(token[1],event,context,'anonymous');
 		} else {
 			// Check that this is a openid connect kind of token
-			accept_openid_connect_token(token[1],context);
+			accept_openid_connect_token(token[1],event,context);
 		}
 	} else {
 		// Require a "Bearer" token
