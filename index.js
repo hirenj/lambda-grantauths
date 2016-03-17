@@ -137,12 +137,13 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	var params = {
 		TableName : "grants",
 		ProjectionExpression : "datasets,proteins,valid_from,valid_to",
-		FilterExpression: "contains(#usr,:userid)",
+		FilterExpression: "contains(#usr,:userid) OR contains(#usr,:anon)",
 		ExpressionAttributeNames:{
 		    "#usr": "users"
 		},
 		ExpressionAttributeValues: {
-		    ":userid": { 'S' : user_id }
+		    ":userid": { 'S' : user_id },
+		    ":anon" : { 'S' : 'anonymous'}
 		}
 	};
 	dynamo.scan(params,function(err,data) {
