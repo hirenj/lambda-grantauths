@@ -37,6 +37,15 @@ module.exports = function(grunt) {
 				function: 'exchangeToken',
 				arn: null,
 			},
+			datahandler : {
+				package: 'jwtAuthorize',
+				options: {
+					file_name: 'index.js',
+					handler: 'index.datahandler',
+				},
+				function: 'datahandler',
+				arn: null,
+			}
 		},
 		lambda_package: {
 			default: {
@@ -44,7 +53,11 @@ module.exports = function(grunt) {
 			},
 			exchangeToken: {
 				package: 'jwtAuthorize',
+			},
+			datahandler: {
+				package: 'jwtAuthorize',
 			}
+
 		},
 		env: {
 			prod: {
@@ -55,6 +68,7 @@ module.exports = function(grunt) {
 	});
 
 	grunt.registerTask('deploy', ['env:prod', 'lambda_package', 'lambda_deploy']);
+	grunt.registerTask('deploy:datahandler', ['env:prod', 'lambda_package:datahandler', 'lambda_deploy:datahandler']);
 	grunt.registerTask('deploy:exchangeToken', ['env:prod', 'lambda_package:exchangeToken', 'lambda_deploy:exchangeToken']);
 	grunt.registerTask('test', ['lambda_invoke']);
 };

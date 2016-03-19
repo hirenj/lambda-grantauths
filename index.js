@@ -340,18 +340,39 @@ var accept_token = function(token) {
 	return validation_promise;
 };
 
+var check_data_access = function(token,dataset,protein_id) {
+	var grants = jwt.decode(token).access;
+	var valid = false;
+	Object.keys(grants).forEach(function(set) {
+		if (set.indexOf(dataset) >= 0) {
+			if (grants[set][0] == '*') {
+				valid = true;
+			}
+			console.log(set,grants[set].join(','));
+			valid = valid || grants[set].filter(function(prot) { return prot === protein_id.toLowerCase(); }).length > 0;
+		}
+	});
+	if (valid) {
+		return Promise.resolve(true);
+	}
+	return Promise.reject(new Error('No access'));
+};
+
 exports.datahandler = function datahandler(event,context) {
+	console.log(JSON.stringify(event));
 	var token = event.authorizationToken.split(' ');
+	var target = event.methodArn.split(':')[5];
+	var resource = target.split('/data/latest/')[1].split('/');
 	if(token[0] === 'Bearer'){
 		Promise.all([
 			accept_token(token[1]),
-			check_data_access(token[1],event)
-		]).then(function() {
-			context.succeed(generatePolicyDocument(data.sub, 'Allow', event.methodArn));
+			check_data_access(token[1],resource[0],resource[1])
+		]).then(function(results) {
+			context.succeed(generatePolicyDocument(results[0].sub, 'Allow', event.methodArn));
 		}).catch(function(err) {
 			console.error(err);
 			console.error(err.stack);
-			context.fail(err);
+			context.fail(err.message);
 		});
 	} else {
 		// Require a "Bearer" token
@@ -370,7 +391,7 @@ exports.loginhandler = function jwtHandler(event, context){
 		accept_token(token[1]).then(function(token) {
 			context.succeed(generatePolicyDocument(token.sub, 'Allow', event.methodArn));
 		}).catch(function(err) {
-			context.fail(err);
+			context.fail(err.message);
 		});
 	} else {
 		// Require a "Bearer" token
