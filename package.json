@@ -24,6 +24,7 @@
   },
   "homepage": "https://github.com/kopertop/lambda-jwt#readme",
   "dependencies": {
+    "es6-promise": "^3.1.2",
     "jsonwebtoken": "^5.5.4",
     "node-rsa": "^0.3.2",
     "node-uuid": "^1.4.7"

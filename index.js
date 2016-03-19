@@ -9,6 +9,7 @@
  */
 var jwt = require('jsonwebtoken');
 var fs = require('fs');
+require('es6-promise').polyfill();
 
 //TODO - get a fresh copy of this file each time
 //we deploy this function
@@ -53,7 +54,7 @@ var summarise_sets = function(grants) {
 	return datasets;
 };
 
-var get_signing_key = function(callback) {
+var generate_signing_key = function() {
 	var NodeRSA = require('node-rsa');
 	var uuid = require('node-uuid');
 	var key_id = uuid.v4();
@@ -62,28 +63,54 @@ var get_signing_key = function(callback) {
 	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
 	var item = {};
 
-	dynamo.putItem({'TableName' :'pubkeys', 'Item' : { kid: { S: key_id }, key: { S: key.exportKey('pkcs1-public-pem') } } },function(err,result) {
-		callback(null,{'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')});
+	// We should write the pubkey to S3 here too
+	return new Promise(function(resolve,reject) {
+		var pubkey = key.exportKey('pkcs1-public-pem');
+		dynamo.putItem({'TableName' :'pubkeys', 'Item' : { kid: { S: key_id }, key: { S: pubkey } } },function(err,result) {
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve({'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')});
+		});
 	});
 };
 
-var get_userid_from_token = function(authorization,context) {
+var get_signing_key = function(key_id) {
+	var AWS = require('aws-sdk');
+	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
+	var params = {
+		AttributesToGet: [ "key" ],
+		TableName : 'pubkeys',
+		Key : { "kid" : { "S" : key_id } }
+    };
+
+	return new Promise(function(resolve,reject) {
+		dynamo.getItem(params,function(err,result) {
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve(result.Item.key.S);
+		});
+
+	});
+};
+
+var get_userid_from_token = function(authorization) {
 	if ( ! authorization ) {
 		return "anonymous";
 	}
 	var token = authorization.split(' ');
 
 	if(token[0] !== 'Bearer') {
-		context.fail('Unauthorized');
+		throw new Error('Unauthorized');
 	}
 
 	var current_token = jwt.decode(token[1],{complete: true});
 
 	if (current_token.payload.iss == 'glycodomain') {
-		context.succeed("Already exchanged");
-		// FIXME - Or we're doing a refresh on an expired token,
-		// and we should simply transfer the grants over.
-		return;
+		throw new Error("exchanged");
 	}
 	var user_id = current_token.payload.sub;
 	if (current_token.payload.iss === 'accounts.google.com') {
@@ -91,6 +118,86 @@ var get_userid_from_token = function(authorization,context) {
 	}
 
 	return user_id;
+};
+
+var copy_token = function(authorization) {
+	if ( ! authorization ) {
+		throw new Error("No token to copy");
+	}
+	var token = authorization.split(' ');
+
+	var current_token = jwt.decode(token[1],{complete: true});
+	var earliest_expiry = Math.floor((new Date()).getTime() / 1000) + 86400;
+
+	var token_content = {
+		'access' : current_token.payload.access,
+		'iss' : 'glycodomain',
+		'exp' : earliest_expiry,
+		'sub' : current_token.payload.sub,
+	};
+
+	return token_content;
+}
+
+var get_grant_token = function(user_id) {
+	var AWS = require('aws-sdk');
+	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
+
+	var params = {
+		TableName : "grants",
+		ProjectionExpression : "datasets,proteins,valid_from,valid_to",
+		FilterExpression: "contains(#usr,:userid) OR contains(#usr,:anon)",
+		ExpressionAttributeNames:{
+		    "#usr": "users"
+		},
+		ExpressionAttributeValues: {
+		    ":userid": { 'S' : user_id },
+		    ":anon" : { 'S' : 'anonymous'}
+		}
+	};
+
+	return new Promise(function(resolve,reject) {
+		dynamo.scan(params,function(err,data) {
+			if (err) {
+				reject(err);
+				return;
+			}
+			var sets = [];
+			var earliest_expiry = Math.floor((new Date()).getTime() / 1000);
+
+			// Add a day to the expiry time, but we should
+			// be doing this depending on the user that is
+			// being supplied to us
+
+			earliest_expiry = earliest_expiry + 86400;
+
+			data.Items.forEach(function(grant) {
+				if (grant.valid_to.N < earliest_expiry ) {
+					earliest_expiry = grant.valid_to.N;
+				}
+				sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
+			});
+			var summary_grant = summarise_sets(sets);
+
+			var token_content = {
+				'access' : summary_grant,
+				'iss' : 'glycodomain',
+				'exp' : earliest_expiry,
+				'sub' : user_id,
+			};
+			resolve(token_content);
+		});
+	});
+};
+
+var get_signed_token = function(token_content) {
+	return generate_signing_key().then(function(key) {
+		return new Promise(function(resolve,reject) {
+			jwt.sign(token_content,key.private,{'algorithm' : 'RS256', 'headers' : { 'kid' : key.kid } }, function(token) {
+				resolve(token);
+			});
+		});
+	});
 };
 
 // We should have one function to check that the JWT from google
@@ -122,65 +229,27 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	// Read the current JWT
 	console.log(JSON.stringify(event));
 
-	var user_id = get_userid_from_token(event.Authorization,context);
-
-	console.log(user_id);
-
-	if ( ! user_id ) {
-		return;
-	}
-
-	var AWS = require('aws-sdk');
-	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
-
-
-	var params = {
-		TableName : "grants",
-		ProjectionExpression : "datasets,proteins,valid_from,valid_to",
-		FilterExpression: "contains(#usr,:userid) OR contains(#usr,:anon)",
-		ExpressionAttributeNames:{
-		    "#usr": "users"
-		},
-		ExpressionAttributeValues: {
-		    ":userid": { 'S' : user_id },
-		    ":anon" : { 'S' : 'anonymous'}
-		}
-	};
-	dynamo.scan(params,function(err,data) {
-		var sets = [];
-		var earliest_expiry = Math.floor((new Date()).getTime() / 1000);
-
-		// Add a day to the expiry time, but we should
-		// be doing this depending on the user that is
-		// being supplied to us
-
-		earliest_expiry = earliest_expiry + 86400;
-
-		data.Items.forEach(function(grant) {
-			if (grant.valid_to.N < earliest_expiry ) {
-				earliest_expiry = grant.valid_to.N;
-			}
-			sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
-		});
-		var summary_grant = summarise_sets(sets);
-
-		var token_content = {
-			'access' : summary_grant,
-			'iss' : 'glycodomain',
-			'exp' : earliest_expiry,
-			'sub' : user_id,
-		};
-
-		get_signing_key(function(err,key) {
-			jwt.sign(token_content,key.private,{'algorithm' : 'RS256', 'headers' : { 'kid' : key.kid } }, function(token) {
-				context.succeed(token);
-			});
-		});
+	var get_userid = Promise.resolve(true).then(function() {
+		return get_userid_from_token(event.Authorization,context);
 	});
-
 
 	// Read the capabilities from the grants table for the user
 	// Encode into new JWT
+
+	var result = get_userid.then(get_grant_token).catch(function(err) {
+		if (err.message == 'exchanged') {
+			console.log("Renewing token");
+			return copy_token(event.Authorization);
+		}
+	}).then(get_signed_token);
+
+	result.then(function(token) {
+		context.succeed(token);
+	}).catch(function(err) {
+		console.error(err);
+		console.error(err.stack);
+		context.fail('Unauthorized');
+	})
 
 
 	// what happens when a user has a new set of capabilities
@@ -191,68 +260,104 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	// Provide capacity to re-build
 };
 
-var accept_openid_connect_token = function(token,event,context) {
+var jwt_verify = function(token,cert) {
+	return new Promise(function(resolve,reject) {
+		jwt.verify(token, cert, { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve(data);
+		});
+	});
+};
+
+var accept_openid_connect_token = function(token) {
 	console.log("Trying to validate bearer on openid token "+token);
 	var cert_id = jwt.decode(token,{complete: true}).header.kid;
 
 	// FIXME - We should be checking timestamps on the JWT
 	// so that we aren't accepting ancient tokens, just
 	// in case someone tries to do that.
-
-	jwt.verify(token, certs[cert_id], { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
-		if(err){
-			console.log('Verification Failure', err);
-			context.fail('Unauthorized');
-		} else if (data && data.iss && data.iss == 'accounts.google.com'){
+	return is_valid_timestamp(decoded.payload).then(function() {
+		return jwt_verify(token,certs[cert_id]);
+	}).then(function(data){
+		if (data && data.iss && data.iss == 'accounts.google.com'){
 			console.log('LOGIN', data);
 			// Restrict the functions to only the token exchange user
-			context.succeed(generatePolicyDocument(data.sub, 'Allow', event.methodArn));
+			return data;
 		} else {
 			console.log('Invalid User', data);
-			context.fail('Unauthorized');
+			throw new Error('Unauthorized');
 		}
 	});
 };
 
-var accept_self_token = function(token,event,context,anonymous) {
+var is_valid_timestamp = function(decoded_token) {
+	if (! decoded_token.exp || decoded_token.exp < Math.floor((new Date()).getTime() / 1000)) {
+		return Promise.reject(new Error('Expired'));
+	}
+	return Promise.resolve(true);
+}
+
+var accept_self_token = function(token,anonymous) {
 	console.log("Trying to validate bearer on self token "+token);
 	var decoded = jwt.decode(token,{complete: true});
 	var cert_id = decoded.header.kid;
 
-	var AWS = require('aws-sdk');
-	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
-	var params = {
-		AttributesToGet: [ "key" ],
-		TableName : 'pubkeys',
-		Key : { "kid" : { "S" : cert_id } }
-    };
+	return is_valid_timestamp(decoded.payload).then(function() {
+		return get_signing_key(cert_id);
+	}).then(function(cert) {
+		return jwt_verify(token,cert);
+	}).then(function(data) {
+		if (data && data.sub && (! anonymous && data.sub !== 'anonymous') || (data.sub === 'anonymous' && anonymous) ){
+			console.log('LOGIN', data);
+			// Restrict the functions to only the token exchange user
+			return data;
+		} else {
+			console.log('Invalid User', data);
+			throw new Error('Unauthorized');
+		}
+	});
+};
 
-	// FIXME - We should be checking timestamps on the JWT
-	// so that we aren't accepting ancient tokens, just
-	// in case someone tries to do that.
+var accept_token = function(token) {
+	var decoded_token = jwt.decode(token);
+	var validation_promise = null;
+	if (decoded_token.iss === 'glycodomain' && decoded_token.sub !== 'anonymous') {
+		// This is one of our own tokens
+		validation_promise = accept_self_token(token);
+	} else if (decoded_token.iss === 'glycodomain' && decoded_token.sub === 'anonymous') {
+		// This is also one of our own tokens
+		validation_promise = accept_self_token(token,'anonymous');
+	} else {
+		// Check that this is a openid connect kind of token
+		validation_promise = accept_openid_connect_token(token);
+	}
+	if ( ! validation_promise ) {
+		return Promise.reject(new Error('Unauthorized'));
+	}
+	return validation_promise;
+};
 
-	dynamo.getItem(params,function(err,result) {
-		console.log(result);
-		if (err) {
+exports.datahandler = function datahandler(event,context) {
+	var token = event.authorizationToken.split(' ');
+	if(token[0] === 'Bearer'){
+		Promise.all([
+			accept_token(token[1]),
+			check_data_access(token[1],event)
+		]).then(function() {
+			context.succeed(generatePolicyDocument(data.sub, 'Allow', event.methodArn));
+		}).catch(function(err) {
 			console.error(err);
 			console.error(err.stack);
-			context.fail('Unauthorized (invalid key)');
-			return;
-		}
-		jwt.verify(token, result.Item.key.S, { algorithms: ['RS256','RS384','RS512'] }, function(err, data){
-			if(err){
-				console.log('Verification Failure', err);
-				context.fail('Unauthorized');
-			} else if (data && data.sub && (! anonymous && data.sub !== 'anonymous') || (data.sub === 'anonymous' && anonymous) ){
-				console.log('LOGIN', data);
-				// Restrict the functions to only the token exchange user
-				context.succeed(generatePolicyDocument(data.sub, 'Allow', event.methodArn));
-			} else {
-				console.log('Invalid User', data);
-				context.fail('Unauthorized');
-			}
+			context.fail(err);
 		});
-	});
+	} else {
+		// Require a "Bearer" token
+		console.log('Wrong token type', token[0]);
+		context.fail('Unauthorized');
+	}
 };
 
 /**
@@ -262,26 +367,14 @@ var accept_self_token = function(token,event,context,anonymous) {
 exports.loginhandler = function jwtHandler(event, context){
 	var token = event.authorizationToken.split(' ');
 	if(token[0] === 'Bearer'){
-		var decoded_token = jwt.decode(token[1]);
-		if (! decoded_token.exp || decoded_token.exp < Math.floor((new Date()).getTime() / 1000)) {
-			context.fail('Expired');
-			return;
-		}
-		if (decoded_token.iss === 'glycodomain' && decoded_token.sub !== 'anonymous') {
-			// This is one of our own tokens
-			accept_self_token(token[1],event,context);
-		} else if (decoded_token.iss === 'glycodomain' && decoded_token.sub === 'anonymous') {
-			// This is also one of our own tokens
-			accept_self_token(token[1],event,context,'anonymous');
-		} else {
-			// Check that this is a openid connect kind of token
-			accept_openid_connect_token(token[1],event,context);
-		}
+		accept_token(token[1]).then(function(token) {
+			context.succeed(generatePolicyDocument(token.sub, 'Allow', event.methodArn));
+		}).catch(function(err) {
+			context.fail(err);
+		});
 	} else {
 		// Require a "Bearer" token
 		console.log('Wrong token type', token[0]);
 		context.fail('Unauthorized');
 	}
-	// If we have no token at all, we should create an anonymous
-	// user identifier, and exchange that for a JWT.
 };
