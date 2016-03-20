@@ -9,6 +9,8 @@
  */
 var jwt = require('jsonwebtoken');
 var fs = require('fs');
+var AWS = require('aws-sdk');
+
 require('es6-promise').polyfill();
 
 //TODO - get a fresh copy of this file each time
@@ -77,16 +79,16 @@ var generate_signing_key = function() {
 };
 
 var get_signing_key = function(key_id) {
-	var AWS = require('aws-sdk');
-	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
 	var params = {
 		AttributesToGet: [ "key" ],
 		TableName : 'pubkeys',
 		Key : { "kid" : { "S" : key_id } }
     };
-
+	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
 	return new Promise(function(resolve,reject) {
+		console.log("Getting signing pubkey");
 		dynamo.getItem(params,function(err,result) {
+			console.log("Got signing pubkey");
 			if (err) {
 				reject(err);
 				return;
@@ -140,9 +142,6 @@ var copy_token = function(authorization) {
 }
 
 var get_grant_token = function(user_id) {
-	var AWS = require('aws-sdk');
-	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
-
 	var params = {
 		TableName : "grants",
 		ProjectionExpression : "datasets,proteins,valid_from,valid_to",
@@ -155,6 +154,7 @@ var get_grant_token = function(user_id) {
 		    ":anon" : { 'S' : 'anonymous'}
 		}
 	};
+	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
 
 	return new Promise(function(resolve,reject) {
 		dynamo.scan(params,function(err,data) {
@@ -304,12 +304,16 @@ var accept_self_token = function(token,anonymous) {
 	console.log("Trying to validate bearer on self token "+token);
 	var decoded = jwt.decode(token,{complete: true});
 	var cert_id = decoded.header.kid;
+	console.log("Decoded token");
 
 	return is_valid_timestamp(decoded.payload).then(function() {
+		console.log("Trying to get cert");
 		return get_signing_key(cert_id);
 	}).then(function(cert) {
+		console.log("Trying to verify JWT");
 		return jwt_verify(token,cert);
 	}).then(function(data) {
+		console.log("Done verifying");
 		if (data && data.sub && (! anonymous && data.sub !== 'anonymous') || (data.sub === 'anonymous' && anonymous) ){
 			console.log('LOGIN', data);
 			// Restrict the functions to only the token exchange user
