@@ -347,11 +347,21 @@ var accept_token = function(token) {
 var check_data_access = function(token,dataset,protein_id) {
 	var grants = jwt.decode(token).access;
 	var valid = false;
+	var dataset_parts = dataset.split(':');
+	var group = dataset_parts[0];
+	var set_id = dataset_parts[1];
 	Object.keys(grants).forEach(function(set) {
-		if (set.indexOf(dataset) >= 0) {
-			if (grants[set][0] == '*') {
-				valid = true;
-			}
+		var grant_set_parts = set.split('/');
+		var valid_set = false;
+		if (grant_set_parts[0] === group && (grant_set_parts[1] === '*' || grant_set_parts[1] === set_id )) {
+			valid_set = true;
+		}
+		if (valid_set) {
+			grants[set].forEach(function(grant_protein_id) {
+				if (grant_protein_id == '*') {
+					valid = true;
+				}
+			});
 			console.log(set,grants[set].join(','));
 			valid = valid || grants[set].filter(function(prot) { return prot === protein_id.toLowerCase(); }).length > 0;
 		}
@@ -365,7 +375,7 @@ var check_data_access = function(token,dataset,protein_id) {
 exports.datahandler = function datahandler(event,context) {
 	console.log(JSON.stringify(event));
 	var token = event.authorizationToken.split(' ');
-	var target = event.methodArn.split(':')[5];
+	var target = event.methodArn.split(':').slice(5).join(':');
 	var resource = target.split('/data/latest/')[1].split('/');
 	if(token[0] === 'Bearer'){
 		Promise.all([
@@ -376,7 +386,7 @@ exports.datahandler = function datahandler(event,context) {
 		}).catch(function(err) {
 			console.error(err);
 			console.error(err.stack);
-			context.fail(err.message);
+			context.succeed(generatePolicyDocument("user", 'Deny', event.methodArn));
 		});
 	} else {
 		// Require a "Bearer" token
