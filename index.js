@@ -218,13 +218,16 @@ var get_signed_token = function(token_content) {
 // membership would have to be some auto-generated policies, or use
 // a custom authorizer to add extra permissions.
 
-// TODO - test whether the policies here can restrict / expand on execution
-// roles
-
 // Make sure we pass the Authorisation header along.
 // http://stackoverflow.com/a/31375476
 
-// Wire up to API endpoint
+/**
+ * Check authorisation for requests asking for data
+ */
+// Permissions: Roles managePublicKey, grantReader
+//   - Dynamodb read publickey table
+//   - Dynamodb write publickey table
+//   - Dynamodb read grants table
 exports.exchangetoken = function exchangetoken(event,context) {
 	// Read the current JWT
 	console.log(JSON.stringify(event));
@@ -372,6 +375,11 @@ var check_data_access = function(token,dataset,protein_id) {
 	return Promise.reject(new Error('No access'));
 };
 
+/**
+ * Check authorisation for requests asking for data
+ */
+// Permissions: Roles readPublicKey
+//   - Dynamodb read publickey table
 exports.datahandler = function datahandler(event,context) {
 	console.log(JSON.stringify(event));
 	var token = event.authorizationToken.split(' ');
@@ -399,6 +407,8 @@ exports.datahandler = function datahandler(event,context) {
  * Handle requests from API Gateway
  * "event" is an object with an "authorizationToken"
  */
+// Permissions: Roles readPublicKey
+//   - Dynamodb read publickey table
 exports.loginhandler = function jwtHandler(event, context){
 	var token = event.authorizationToken.split(' ');
 	if(token[0] === 'Bearer'){
