@@ -53,28 +53,10 @@
         }
       }
     },
-    "LambdaExecRole": {
-      "Type": "AWS::IAM::Role",
-      "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "ReadJWTPubkeys" }],
-        "AssumeRolePolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Principal": {
-                "Service": "lambda.amazonaws.com"
-              },
-              "Action": "sts:AssumeRole"
-            }
-          ]
-        }
-      }
-    },
-    "LogWriterPolicy": {
+    "AuthLogWriterPolicy": {
       "Type": "AWS::IAM::Policy",
       "Properties" : {
-        "PolicyName" : "LogWriterPolicy",
+        "PolicyName" : "AuthLogWriterPolicy",
         "PolicyDocument" : {
             "Version": "2012-10-17",
             "Statement": [
@@ -89,9 +71,120 @@
               }
             ]
         },
-        "Roles" : [ { "Ref" : "LambdaExecRole" } ]
+        "Roles" : [ { "Ref" : "LambdaExchangetokenRole" },{ "Ref" : "LambdaDatahandlerRole" },{ "Ref" : "LambdaLoginhandlerRole" } ]
       },
-      "DependsOn" : "LambdaExecRole"
+      "DependsOn" : ["LambdaExchangetokenRole","LambdaLoginhandlerRole","LambdaDatahandlerRole"]
+    },
+    "LambdaExchangetokenRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "ManagedPolicyArns" : [ { "Ref" : "ReadJWTPubkeys" }, {"Ref" : "WriteJWTPubkeys"}, {"Ref" : "ReadGrants"} ],
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "LambdaDatahandlerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "ManagedPolicyArns" : [ { "Ref" : "ReadJWTPubkeys" } ],
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "LambdaLoginhandlerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "ManagedPolicyArns" : [ { "Ref" : "ReadJWTPubkeys" } ],
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "exchangetoken" : {
+      "Type" : "AWS::Lambda::Function",
+      "Properties" : {
+        "Code" : {
+          "ZipFile": { "Fn::Join": ["", [
+            "exports.exchangetoken = function(event, context) {",
+            "  context.succeed('OK');",
+            "};"
+          ]]}
+        },
+        "Description" : "exchangetoken",
+        "Handler" : "index.exchangetoken",
+        "Role" : {"Fn::GetAtt" : ["LambdaExchangetokenRole", "Arn"] },
+        "Runtime" : "nodejs",
+        "MemorySize" : 128,
+        "Timeout" : 20
+      },
+      "DependsOn" : "LambdaExchangetokenRole"
+    },
+    "datahandler" : {
+      "Type" : "AWS::Lambda::Function",
+      "Properties" : {
+        "Code" : {
+          "ZipFile": { "Fn::Join": ["", [
+            "exports.datahandler = function(event, context) {",
+            "  context.succeed('OK');",
+            "};"
+          ]]}
+        },
+        "Description" : "datahandler",
+        "Handler" : "index.datahandler",
+        "Role" : {"Fn::GetAtt" : ["LambdaDatahandlerRole", "Arn"] },
+        "Runtime" : "nodejs",
+        "MemorySize" : 128,
+        "Timeout" : 10
+      },
+      "DependsOn" : "LambdaDatahandlerRole"
+    },
+    "loginhandler" : {
+      "Type" : "AWS::Lambda::Function",
+      "Properties" : {
+        "Code" : {
+          "ZipFile": { "Fn::Join": ["", [
+            "exports.loginhandler = function(event, context) {",
+            "  context.succeed('OK');",
+            "};"
+          ]]}
+        },
+        "Description" : "loginhandler",
+        "Handler" : "index.loginhandler",
+        "Role" : {"Fn::GetAtt" : ["LambdaLoginhandlerRole", "Arn"] },
+        "Runtime" : "nodejs",
+        "MemorySize" : 128,
+        "Timeout" : 10
+      },
+      "DependsOn" : "LambdaLoginhandlerRole"
     },
     "ReadJWTPubkeys": {
       "Type": "AWS::IAM::ManagedPolicy",
