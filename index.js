@@ -1,7 +1,7 @@
 /**
  * Lambda function to support JWT.
  * Used for authenticating API requests for API Gateway
- * as a custom authorizor:
+ * as a custom authorizer:
  *
  * @see https://jwt.io/introduction/
  * @see http://docs.aws.amazon.com/apigateway/latest/developerguide/use-custom-authorizer.html
