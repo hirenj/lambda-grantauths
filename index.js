@@ -370,6 +370,9 @@ var check_data_access = function(token,dataset,protein_id) {
 		}
 	});
 	if (valid) {
+		// We can also push through the valid datasets here
+		// and shove it into the principalId field that can
+		// then be decoded in the target function
 		return Promise.resolve(true);
 	}
 	return Promise.reject(new Error('No access'));
