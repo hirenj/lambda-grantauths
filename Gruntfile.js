@@ -7,6 +7,13 @@ module.exports = function(grunt) {
 	require('load-grunt-tasks')(grunt);
 
 	var path = require('path');
+
+	var config = {'functions' : {} };
+	try {
+		config = require('./resources.conf.json');
+	} catch (e) {
+	}
+
 	grunt.initConfig({
 		lambda_invoke: {
 			default: {
@@ -25,7 +32,7 @@ module.exports = function(grunt) {
 					file_name: 'index.js',
 					handler: 'loginhandler',
 				},
-				function: 'jwtAuthorize',
+				function: config.functions['loginhandler'] || 'loginhandler',
 				arn: null,
 			},
 			exchangeToken: {
@@ -34,7 +41,7 @@ module.exports = function(grunt) {
 					file_name: 'index.js',
 					handler: 'index.exchangetoken',
 				},
-				function: 'exchangeToken',
+				function: config.functions['exchangetoken'] || 'exchangetoken',
 				arn: null,
 			},
 			datahandler : {
@@ -43,7 +50,7 @@ module.exports = function(grunt) {
 					file_name: 'index.js',
 					handler: 'index.datahandler',
 				},
-				function: 'datahandler',
+				function: config.functions['datahandler'] || 'datahandler',
 				arn: null,
 			}
 		},
