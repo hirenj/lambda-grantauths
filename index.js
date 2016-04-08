@@ -11,6 +11,17 @@ var jwt = require('jsonwebtoken');
 var fs = require('fs');
 var AWS = require('aws-sdk');
 
+var grants_table = '';
+var pubkeys_table = '';
+
+
+try {
+    var config = require('./resources.conf.json');
+    pubkeys_table = config.tables.pubkeys;
+    grants_table = config.tables.grants;
+} catch (e) {
+}
+
 require('es6-promise').polyfill();
 
 //TODO - get a fresh copy of this file each time
@@ -64,11 +75,11 @@ var generate_signing_key = function() {
 	var AWS = require('aws-sdk');
 	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
 	var item = {};
-
+	console.log(pubkeys_table);
 	// We should write the pubkey to S3 here too
 	return new Promise(function(resolve,reject) {
 		var pubkey = key.exportKey('pkcs1-public-pem');
-		dynamo.putItem({'TableName' :'pubkeys', 'Item' : { kid: { S: key_id }, key: { S: pubkey } } },function(err,result) {
+		dynamo.putItem({'TableName': pubkeys_table, 'Item' : { kid: { S: key_id }, key: { S: pubkey } } },function(err,result) {
 			if (err) {
 				reject(err);
 				return;
@@ -81,7 +92,7 @@ var generate_signing_key = function() {
 var get_signing_key = function(key_id) {
 	var params = {
 		AttributesToGet: [ "key" ],
-		TableName : 'pubkeys',
+		TableName : pubkeys_table,
 		Key : { "kid" : { "S" : key_id } }
     };
 	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
@@ -143,7 +154,7 @@ var copy_token = function(authorization) {
 
 var get_grant_token = function(user_id) {
 	var params = {
-		TableName : "grants",
+		TableName : grants_table,
 		ProjectionExpression : "datasets,proteins,valid_from,valid_to",
 		FilterExpression: "contains(#usr,:userid) OR contains(#usr,:anon)",
 		ExpressionAttributeNames:{
