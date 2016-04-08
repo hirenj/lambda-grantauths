@@ -382,7 +382,7 @@ var check_data_access = function(token,dataset,protein_id) {
 				}
 			});
 			console.log(set,grants[set].join(','));
-			valid = valid || grants[set].filter(function(prot) { return prot.toLowerCase() === protein_id.toLowerCase(); }).length > 0;
+			valid = valid || grants[set].filter(function(prot) { return prot.toLowerCase() === protein_id; }).length > 0;
 		}
 	});
 	if (valid) {
@@ -408,7 +408,7 @@ exports.datahandler = function datahandler(event,context) {
 	if(token[0] === 'Bearer'){
 		Promise.all([
 			accept_token(token[1]),
-			check_data_access(token[1],resource[0],resource[1])
+			check_data_access(token[1],resource[0],resource[1].toLowerCase())
 		]).then(function(results) {
 			context.succeed(generatePolicyDocument(results[0].sub, 'Allow', event.methodArn));
 		}).catch(function(err) {
