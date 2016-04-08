@@ -364,10 +364,15 @@ var check_data_access = function(token,dataset,protein_id) {
 	var dataset_parts = dataset.split(':');
 	var group = dataset_parts[0];
 	var set_id = dataset_parts[1];
+	console.log(grants);
+	console.log(group,set_id);
 	Object.keys(grants).forEach(function(set) {
 		var grant_set_parts = set.split('/');
 		var valid_set = false;
 		if (grant_set_parts[0] === group && (grant_set_parts[1] === '*' || grant_set_parts[1] === set_id )) {
+			valid_set = true;
+		}
+		if (group === 'combined' && typeof set_id === 'undefined') {
 			valid_set = true;
 		}
 		if (valid_set) {
@@ -377,7 +382,7 @@ var check_data_access = function(token,dataset,protein_id) {
 				}
 			});
 			console.log(set,grants[set].join(','));
-			valid = valid || grants[set].filter(function(prot) { return prot === protein_id.toLowerCase(); }).length > 0;
+			valid = valid || grants[set].filter(function(prot) { return prot.toLowerCase() === protein_id.toLowerCase(); }).length > 0;
 		}
 	});
 	if (valid) {
@@ -399,6 +404,7 @@ exports.datahandler = function datahandler(event,context) {
 	var token = event.authorizationToken.split(' ');
 	var target = event.methodArn.split(':').slice(5).join(':');
 	var resource = target.split('/data/latest/')[1].split('/');
+	console.log(resource);
 	if(token[0] === 'Bearer'){
 		Promise.all([
 			accept_token(token[1]),
