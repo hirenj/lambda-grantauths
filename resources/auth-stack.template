@@ -256,7 +256,8 @@
               "Effect": "Allow",
               "Action": [
                   "dynamodb:PutItem",
-                  "dynamodb:GetItem"
+                  "dynamodb:GetItem",
+                  "dynamodb:BatchWriteItem"
               ],
               "Resource": { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":", { "Ref" : "AWS::AccountId" } ,":table/", { "Ref" : "grants" } ] ]}
             }
