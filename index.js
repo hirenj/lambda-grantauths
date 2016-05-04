@@ -75,7 +75,6 @@ var generate_signing_key = function() {
 	var AWS = require('aws-sdk');
 	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
 	var item = {};
-	console.log(pubkeys_table);
 	// We should write the pubkey to S3 here too
 	return new Promise(function(resolve,reject) {
 		var pubkey = key.exportKey('pkcs1-public-pem');
@@ -241,7 +240,6 @@ var get_signed_token = function(token_content) {
 //   - Dynamodb read grants table
 exports.exchangetoken = function exchangetoken(event,context) {
 	// Read the current JWT
-	console.log(JSON.stringify(event));
 
 	var get_userid = Promise.resolve(true).then(function() {
 		return get_userid_from_token(event.Authorization,context);
@@ -287,7 +285,7 @@ var jwt_verify = function(token,cert) {
 };
 
 var accept_openid_connect_token = function(token) {
-	console.log("Trying to validate bearer on openid token "+token);
+	console.log("Trying to validate bearer on openid token ");
 	var decoded = jwt.decode(token,{complete: true});
 	var cert_id = decoded.header.kid;
 
@@ -365,8 +363,8 @@ var check_data_access = function(token,dataset,protein_id) {
 	var dataset_parts = dataset.split(':');
 	var group = dataset_parts[0];
 	var set_id = dataset_parts[1];
-	console.log(grants);
-	console.log(group,set_id);
+	console.log("Grants for user ",grants);
+	console.log("Trying to get access to ",group,set_id);
 	Object.keys(grants).forEach(function(set) {
 		var grant_set_parts = set.split('/');
 		var valid_set = false;
@@ -382,7 +380,7 @@ var check_data_access = function(token,dataset,protein_id) {
 					valid = true;
 				}
 			});
-			console.log(set,grants[set].join(','));
+			console.log("Valid grants for",set,grants[set].join(','));
 			valid = valid || grants[set].filter(function(prot) { return prot.toLowerCase() === protein_id; }).length > 0;
 		}
 	});
@@ -401,11 +399,10 @@ var check_data_access = function(token,dataset,protein_id) {
 // Permissions: Roles readPublicKey
 //   - Dynamodb read publickey table
 exports.datahandler = function datahandler(event,context) {
-	console.log(JSON.stringify(event));
 	var token = event.authorizationToken.split(' ');
 	var target = event.methodArn.split(':').slice(5).join(':');
 	var resource = target.split('/data/latest/')[1].split('/');
-	console.log(resource);
+	console.log("Checking access for",resource);
 	if(token[0] === 'Bearer'){
 		Promise.all([
 			accept_token(token[1]),
