@@ -288,7 +288,8 @@ var jwt_verify = function(token,cert) {
 
 var accept_openid_connect_token = function(token) {
 	console.log("Trying to validate bearer on openid token "+token);
-	var cert_id = jwt.decode(token,{complete: true}).header.kid;
+	var decoded = jwt.decode(token,{complete: true});
+	var cert_id = decoded.header.kid;
 
 	// FIXME - We should be checking timestamps on the JWT
 	// so that we aren't accepting ancient tokens, just
