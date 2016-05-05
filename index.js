@@ -26,7 +26,18 @@ require('es6-promise').polyfill();
 
 //TODO - get a fresh copy of this file each time
 //we deploy this function
+// Microsoft keys from
+// https://login.microsoftonline.com/common/discovery/v2.0/keys
+// Derived from https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration (jwks_uri)
 var certs = JSON.parse(fs.readFileSync('certs.json'));
+
+var tennants = JSON.parse(fs.readFileSync('tennants.json'));
+
+var valid_microsoft_tennant = function(tennant_id) {
+	return Object.keys(tennants).filter(function(tennant) {
+		return tennants[tennant].id = tennant_id;
+	});
+}
 
 function generatePolicyDocument(principalId, effect, resource) {
 	var authResponse = {};
@@ -125,11 +136,24 @@ var get_userid_from_token = function(authorization) {
 	if (current_token.payload.iss == 'glycodomain') {
 		throw new Error("exchanged");
 	}
-	var user_id = current_token.payload.sub;
+	var user_id = null;
+	current_token.payload.sub;
 	if (current_token.payload.iss === 'accounts.google.com') {
-		user_id = 'googleuser-'+user_id;
+		user_id = current_token.payload.email;
 	}
-
+	if (current_token.payload.iss.match(/^https:\/\/login\.microsoftonline\.com\//)) {
+		var tennants = valid_microsoft_tennant(current_token.payload.tid);
+		if (tennants.length < 1) {
+			throw new Error("Not a valid tennant for microsoft login");
+		}
+		user_id = current_token.payload.email || current_token.payload.preferred_username;
+		if ( ! user_id.match(tennants[0].email_pattern)) {
+			throw new Error("Microsoft account invalid tennant pattern");
+		}
+	}
+	if ( ! user_id ) {
+		throw new Error("No valid token provider");
+	}
 	return user_id;
 };
 
