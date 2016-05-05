@@ -8,6 +8,7 @@
  * @author Chris Moyer <cmoyer@aci.info>
  */
 var jwt = require('jsonwebtoken');
+var jwkToPem = require('jwk-to-pem');
 var fs = require('fs');
 var AWS = require('aws-sdk');
 
@@ -29,7 +30,11 @@ require('es6-promise').polyfill();
 // Microsoft keys from
 // https://login.microsoftonline.com/common/discovery/v2.0/keys
 // Derived from https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration (jwks_uri)
-var certs = JSON.parse(fs.readFileSync('certs.json'));
+
+// Google keys from
+// https://accounts.google.com/.well-known/openid-configuration
+// https://www.googleapis.com/oauth2/v3/certs
+var certs = JSON.parse(fs.readFileSync('certs.json')).keys;
 
 var tennants = JSON.parse(fs.readFileSync('tennants.json'));
 
@@ -319,7 +324,7 @@ var accept_openid_connect_token = function(token) {
 	// so that we aren't accepting ancient tokens, just
 	// in case someone tries to do that.
 	return is_valid_timestamp(decoded.payload).then(function() {
-		return jwt_verify(token,certs[cert_id]);
+		return jwt_verify(token, jwkToPem(certs.filter(function(cert) { return cert.kid == cert_id; })[0]) );
 	}).then(function(data){
 		if (data && data.iss && data.iss == 'accounts.google.com'){
 			console.log('LOGIN', data);
@@ -346,10 +351,10 @@ var accept_self_token = function(token,anonymous) {
 	console.log("Decoded token");
 
 	return is_valid_timestamp(decoded.payload).then(function() {
-		console.log("Trying to get cert");
+		console.log("Trying to get cert ",cert_id);
 		return get_signing_key(cert_id);
 	}).then(function(cert) {
-		console.log("Trying to verify JWT");
+		console.log("Trying to verify JWT using cert ",cert);
 		return jwt_verify(token,cert);
 	}).then(function(data) {
 		console.log("Done verifying");
