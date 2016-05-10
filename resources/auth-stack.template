@@ -71,9 +71,27 @@
               }
             ]
         },
-        "Roles" : [ { "Ref" : "LambdaExchangetokenRole" },{ "Ref" : "LambdaDatahandlerRole" },{ "Ref" : "LambdaLoginhandlerRole" } ]
+        "Roles" : [ { "Ref" : "LambdaExchangetokenRole" },{ "Ref" : "LambdaDatahandlerRole" },{ "Ref" : "LambdaLoginhandlerRole" }, {"Ref" : "LambdaUpdateCertificatesRole"} ]
       },
-      "DependsOn" : ["LambdaExchangetokenRole","LambdaLoginhandlerRole","LambdaDatahandlerRole"]
+      "DependsOn" : ["LambdaExchangetokenRole","LambdaLoginhandlerRole","LambdaDatahandlerRole","LambdaUpdateCertificatesRole"]
+    },
+    "LambdaUpdateCertificatesRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "ManagedPolicyArns" : [ { "Ref" : "WriteCertificatesConfig" }, { "Ref" : "RegisterEvents" } ],
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
     },
     "LambdaExchangetokenRole": {
       "Type": "AWS::IAM::Role",
@@ -128,6 +146,25 @@
           ]
         }
       }
+    },
+    "updateCertificates" : {
+      "Type" : "AWS::Lambda::Function",
+      "Properties" : {
+        "Code" : {
+          "ZipFile": { "Fn::Join": ["", [
+            "exports.updateCertificates = function(event, context) {",
+            "  context.succeed('OK');",
+            "};"
+          ]]}
+        },
+        "Description" : "updateCertificates",
+        "Handler" : "index.updateCertificates",
+        "Role" : {"Fn::GetAtt" : ["LambdaUpdateCertificatesRole", "Arn"] },
+        "Runtime" : "nodejs",
+        "MemorySize" : 128,
+        "Timeout" : 60
+      },
+      "DependsOn" : "LambdaUpdateCertificatesRole"
     },
     "exchangetoken" : {
       "Type" : "AWS::Lambda::Function",
@@ -244,6 +281,29 @@
       },
       "DependsOn": "grants"
     },
+    "WriteCertificatesConfig" : {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties" : {
+        "Description" : "WriteCertificatesConfig",
+        "PolicyDocument" : {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "WriteCertificatesConfig",
+              "Effect": "Allow",
+              "Action": [
+                  "s3:PutObject",
+                  "s3:GetObject",
+                  "s3:PutObjectAcl"
+              ],
+              "Resource": { "Fn::Join" :  [ "", [ "arn:aws:s3:", ":", ":", { "Ref" : "dataBucket" }, "/conf/authcerts" ] ]}
+            }
+
+          ]
+        }
+      },
+      "DependsOn": "grants"
+    },
     "WriteGrants" : {
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties" : {
@@ -275,7 +335,18 @@
         }
       },
       "DependsOn": "grants"
-    }    
+    },
+    "LambdaUpdateCertificatesPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName" : { "Fn::GetAtt" : ["updateCertificates", "Arn"] },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "events.amazonaws.com"
+      },
+      "Metadata" : {
+        "Comment" : "Used to update the pubkeys from auth providers"
+      }
+    }
   },
   "Outputs": {
     "pubkeysTablename": {

@@ -52,6 +52,15 @@ module.exports = function(grunt) {
 				},
 				function: config.functions['datahandler'] || 'datahandler',
 				arn: null,
+			},
+			updateCertificates: {
+				package: 'jwtAuthorize',
+				options: {
+					file_name: 'index.js',
+					handler: 'index.updateCertificates',
+				},
+				function: config.functions['updateCertificates'] || 'updateCertificates',
+				arn: null,
 			}
 		},
 		lambda_package: {
@@ -63,8 +72,10 @@ module.exports = function(grunt) {
 			},
 			datahandler: {
 				package: 'jwtAuthorize',
+			},
+			updateCertificates: {
+				package: 'jwtAuthorize',
 			}
-
 		},
 		env: {
 			prod: {
@@ -78,5 +89,6 @@ module.exports = function(grunt) {
 	grunt.registerTask('deploy:loginhandler', ['env:prod', 'lambda_package:loginhandler', 'lambda_deploy:loginhandler']);
 	grunt.registerTask('deploy:datahandler', ['env:prod', 'lambda_package:datahandler', 'lambda_deploy:datahandler']);
 	grunt.registerTask('deploy:exchangeToken', ['env:prod', 'lambda_package:exchangeToken', 'lambda_deploy:exchangeToken']);
+	grunt.registerTask('deploy:updateCertificates', ['env:prod', 'lambda_package:updateCertificates', 'lambda_deploy:updateCertificates']);
 	grunt.registerTask('test', ['lambda_invoke']);
 };

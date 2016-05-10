@@ -15,15 +15,58 @@ var AWS = require('aws-sdk');
 var grants_table = '';
 var pubkeys_table = '';
 
+var bucket = 'gator';
+
 
 try {
     var config = require('./resources.conf.json');
     pubkeys_table = config.tables.pubkeys;
     grants_table = config.tables.grants;
+    bucket = config.buckets.dataBucket;
 } catch (e) {
 }
 
 require('es6-promise').polyfill();
+
+var get_certificates = Promise.resolve({'keys' : []});
+var retrieve_certs = function() {
+	get_certificates = new Promise(function(resolve,reject) {
+		var s3 = new AWS.S3({region:'us-east-1'});
+		var params = {
+			Bucket: bucket,
+			Key: 'conf/authcerts'
+		};
+		s3.getObject(params,function(err,result) {
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve(JSON.parse(result.Body.toString()));
+		});
+	});
+	return get_certificates;
+};
+
+retrieve_certs();
+
+var write_certificates = function(certs) {
+	var s3 = new AWS.S3({region:'us-east-1'});
+	var params = {
+		Bucket: bucket,
+		Key: 'conf/authcerts',
+		Body: JSON.stringify(certs),
+		ACL: 'public-read'
+	};
+	return new Promise(function(resolve,reject) {
+		s3.putObject(params,function(err,result) {
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve(true);
+		});
+	});
+};
 
 //TODO - get a fresh copy of this file each time
 //we deploy this function
@@ -34,7 +77,7 @@ require('es6-promise').polyfill();
 // Google keys from
 // https://accounts.google.com/.well-known/openid-configuration
 // https://www.googleapis.com/oauth2/v3/certs
-var certs = JSON.parse(fs.readFileSync('certs.json')).keys;
+// var certs = JSON.parse(fs.readFileSync('certs.json')).keys;
 
 var tennants = JSON.parse(fs.readFileSync('tennants.json'));
 
@@ -323,8 +366,8 @@ var accept_openid_connect_token = function(token) {
 	// FIXME - We should be checking timestamps on the JWT
 	// so that we aren't accepting ancient tokens, just
 	// in case someone tries to do that.
-	return is_valid_timestamp(decoded.payload).then(function() {
-		return jwt_verify(token, jwkToPem(certs.filter(function(cert) { return cert.kid == cert_id; })[0]) );
+	return is_valid_timestamp(decoded.payload).then(retrieve_certs).then(function(certs) {
+		return jwt_verify(token, jwkToPem(certs.keys.filter(function(cert) { return cert.kid == cert_id; })[0]) );
 	}).then(function(data){
 		if (data && data.iss && data.iss == 'accounts.google.com'){
 			console.log('LOGIN', data);
@@ -419,7 +462,7 @@ var check_data_access = function(token,dataset,protein_id) {
 		// We can also push through the valid datasets here
 		// and shove it into the principalId field that can
 		// then be decoded in the target function
-		return Promise.resolve(true);
+		return Promise.resolve(JSON.stringify(grants));
 	}
 	return Promise.reject(new Error('No access'));
 };
@@ -440,7 +483,7 @@ exports.datahandler = function datahandler(event,context) {
 			accept_token(token[1]),
 			check_data_access(token[1],resource[0],resource[1].toLowerCase())
 		]).then(function(results) {
-			context.succeed(generatePolicyDocument(results[0].sub, 'Allow', event.methodArn));
+			context.succeed(generatePolicyDocument(results[1], 'Allow', event.methodArn));
 		}).catch(function(err) {
 			console.error(err);
 			console.error(err.stack);
@@ -472,4 +515,51 @@ exports.loginhandler = function jwtHandler(event, context){
 		console.log('Wrong token type', token[0]);
 		context.fail('Unauthorized');
 	}
+};
+
+var get_file = function(url) {
+	return new Promise(function(resolve,reject) {
+		require('https').get(url, function(res) {
+			res.setEncoding('utf8');
+			var body = '';
+			res.on('data', function(chunk) {
+				body += chunk;
+			});
+			res.on('end', function() {
+				body = JSON.parse(body);
+				resolve(body);
+			});
+		}).on('error',function(err) {
+			reject(err);
+		});
+	});
+};
+
+var get_jwks = function(conf_url) {
+	return get_file(conf_url).then(function(conf) {
+		return get_file(conf.jwks_uri);
+	});
+};
+
+exports.updateCertificates = function updateCertificates(event,context) {
+	// retrieve_certs().then(function() {
+	// 	context.succeed("Here");
+	// }).catch(function(err) {
+	// 	context.succeed("There");
+	// });
+	var google_conf = "https://accounts.google.com/.well-known/openid-configuration";
+	var ms_conf = "https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration";
+	Promise.all( [ get_jwks(ms_conf), get_jwks(google_conf) ] ).then(function(configs) {
+		var confs = configs.reduce(function(curr,next) { if ( ! curr ) { return next; } curr.keys = curr.keys.concat(next.keys); return curr; });
+		return write_certificates(confs);
+	}).then(function() {
+		return require('./events').setInterval('updateCertificates','24 hours').then(function() {
+			return require('./events').subscribe('updateCertificates',context.invokedFunctionArn,{});
+		});
+	}).then(function() {
+		context.succeed('OK');
+	}).catch(function(err) {
+		console.log(err);
+		context.fail("NOT OK");
+	});
 };
