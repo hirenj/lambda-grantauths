@@ -553,7 +553,7 @@ exports.updateCertificates = function updateCertificates(event,context) {
 		var confs = configs.reduce(function(curr,next) { if ( ! curr ) { return next; } curr.keys = curr.keys.concat(next.keys); return curr; });
 		return write_certificates(confs);
 	}).then(function() {
-		return require('./events').setInterval('updateCertificates','24 hours').then(function() {
+		return require('./events').setInterval('updateCertificates','12 hours').then(function() {
 			return require('./events').subscribe('updateCertificates',context.invokedFunctionArn,{});
 		});
 	}).then(function() {
