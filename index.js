@@ -35,7 +35,7 @@ var retrieve_certs = function() {
 	};
 
 	get_certificates = s3.getObject(params).promise().then(function(result) {
-		resolve(JSON.parse(result.data.Body.toString()));
+		return(JSON.parse(result.Body.toString()));
 	});
 	return get_certificates;
 };
@@ -135,17 +135,10 @@ var get_signing_key = function(key_id) {
 		Key : { "kid" : { "S" : key_id } }
     };
 	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
-	return new Promise(function(resolve,reject) {
-		console.log("Getting signing pubkey");
-		dynamo.getItem(params,function(err,result) {
-			console.log("Got signing pubkey");
-			if (err) {
-				reject(err);
-				return;
-			}
-			resolve(result.Item.key.S);
-		});
-
+	console.log("Getting signing pubkey");
+	return dynamo.getItem(params).promise().then(function(result) {
+		console.log("Got signing pubkey");
+		return(result.Item.key.S);
 	});
 };
 
@@ -219,37 +212,31 @@ var get_grant_token = function(user_id) {
 	};
 	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
 
-	return new Promise(function(resolve,reject) {
-		dynamo.scan(params,function(err,data) {
-			if (err) {
-				reject(err);
-				return;
+	return dynamo.scan(params).promise().then(function(data) {
+		var sets = [];
+		var earliest_expiry = Math.floor((new Date()).getTime() / 1000);
+
+		// Add a day to the expiry time, but we should
+		// be doing this depending on the user that is
+		// being supplied to us
+
+		earliest_expiry = earliest_expiry + 86400;
+
+		data.Items.forEach(function(grant) {
+			if (grant.valid_to.N < earliest_expiry ) {
+				earliest_expiry = grant.valid_to.N;
 			}
-			var sets = [];
-			var earliest_expiry = Math.floor((new Date()).getTime() / 1000);
-
-			// Add a day to the expiry time, but we should
-			// be doing this depending on the user that is
-			// being supplied to us
-
-			earliest_expiry = earliest_expiry + 86400;
-
-			data.Items.forEach(function(grant) {
-				if (grant.valid_to.N < earliest_expiry ) {
-					earliest_expiry = grant.valid_to.N;
-				}
-				sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
-			});
-			var summary_grant = summarise_sets(sets);
-
-			var token_content = {
-				'access' : summary_grant,
-				'iss' : 'glycodomain',
-				'exp' : earliest_expiry,
-				'sub' : user_id,
-			};
-			resolve(token_content);
+			sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
 		});
+		var summary_grant = summarise_sets(sets);
+
+		var token_content = {
+			'access' : summary_grant,
+			'iss' : 'glycodomain',
+			'exp' : earliest_expiry,
+			'sub' : user_id,
+		};
+		return token_content;
 	});
 };
 
@@ -533,8 +520,8 @@ exports.updateCertificates = function updateCertificates(event,context) {
 		var confs = configs.reduce(function(curr,next) { if ( ! curr ) { return next; } curr.keys = curr.keys.concat(next.keys); return curr; });
 		return write_certificates(confs);
 	}).then(function() {
-		return require('./events').setInterval('updateCertificates','12 hours').then(function() {
-			return require('./events').subscribe('updateCertificates',context.invokedFunctionArn,{});
+		return require('lambda-helpers').events.setInterval('updateCertificates','12 hours').then(function() {
+			return require('lambda-helpers').events.subscribe('updateCertificates',context.invokedFunctionArn,{});
 		});
 	}).then(function() {
 		context.succeed('OK');
