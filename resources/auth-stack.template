@@ -160,7 +160,7 @@
         "Description" : "updateCertificates",
         "Handler" : "index.updateCertificates",
         "Role" : {"Fn::GetAtt" : ["LambdaUpdateCertificatesRole", "Arn"] },
-        "Runtime" : "nodejs",
+        "Runtime" : "nodejs4.3",
         "MemorySize" : 128,
         "Timeout" : 60
       },
@@ -179,7 +179,7 @@
         "Description" : "exchangetoken",
         "Handler" : "index.exchangetoken",
         "Role" : {"Fn::GetAtt" : ["LambdaExchangetokenRole", "Arn"] },
-        "Runtime" : "nodejs",
+        "Runtime" : "nodejs4.3",
         "MemorySize" : 128,
         "Timeout" : 20
       },
@@ -198,7 +198,7 @@
         "Description" : "datahandler",
         "Handler" : "index.datahandler",
         "Role" : {"Fn::GetAtt" : ["LambdaDatahandlerRole", "Arn"] },
-        "Runtime" : "nodejs",
+        "Runtime" : "nodejs4.3",
         "MemorySize" : 128,
         "Timeout" : 10
       },
@@ -217,7 +217,7 @@
         "Description" : "loginhandler",
         "Handler" : "index.loginhandler",
         "Role" : {"Fn::GetAtt" : ["LambdaLoginhandlerRole", "Arn"] },
-        "Runtime" : "nodejs",
+        "Runtime" : "nodejs4.3",
         "MemorySize" : 128,
         "Timeout" : 10
       },
