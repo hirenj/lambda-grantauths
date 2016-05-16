@@ -38,7 +38,7 @@ let retrieve_certs = function() {
 	};
 
 	get_certificates = s3.getObject(params).promise().then(function(result){
-		JSON.parse(result.Body.toString());
+		return JSON.parse(result.Body.toString());
 	});
 	return get_certificates;
 };

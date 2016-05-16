@@ -26,7 +26,7 @@
   },
   "homepage": "https://github.com/kopertop/lambda-jwt#readme",
   "dependencies": {
-    "lambda-helpers": "~0.0.1",
+    "lambda-helpers": "hirenj/lambda-helpers",
     "jsonwebtoken": "^5.5.4",
     "jwk-to-pem": "^1.2.5",
     "node-rsa": "^0.3.2",
