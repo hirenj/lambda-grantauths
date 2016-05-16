@@ -1,3 +1,4 @@
+"use strict";
 /**
  * Lambda function to support JWT.
  * Used for authenticating API requests for API Gateway
@@ -10,13 +11,12 @@
 var jwt = require('jsonwebtoken');
 var jwkToPem = require('jwk-to-pem');
 var fs = require('fs');
-var AWS = require('aws-sdk');
+var AWS = require('lambda-helpers').AWS;
 
 var grants_table = '';
 var pubkeys_table = '';
 
 var bucket = 'gator';
-
 
 try {
     var config = require('./resources.conf.json');
@@ -26,23 +26,16 @@ try {
 } catch (e) {
 }
 
-require('es6-promise').polyfill();
-
 var get_certificates = Promise.resolve({'keys' : []});
 var retrieve_certs = function() {
-	get_certificates = new Promise(function(resolve,reject) {
-		var s3 = new AWS.S3({region:'us-east-1'});
-		var params = {
-			Bucket: bucket,
-			Key: 'conf/authcerts'
-		};
-		s3.getObject(params,function(err,result) {
-			if (err) {
-				reject(err);
-				return;
-			}
-			resolve(JSON.parse(result.Body.toString()));
-		});
+	var s3 = new AWS.S3({region:'us-east-1'});
+	var params = {
+		Bucket: bucket,
+		Key: 'conf/authcerts'
+	};
+
+	get_certificates = s3.getObject(params).promise().then(function(result) {
+		resolve(JSON.parse(result.data.Body.toString()));
 	});
 	return get_certificates;
 };
@@ -57,15 +50,7 @@ var write_certificates = function(certs) {
 		Body: JSON.stringify(certs),
 		ACL: 'public-read'
 	};
-	return new Promise(function(resolve,reject) {
-		s3.putObject(params,function(err,result) {
-			if (err) {
-				reject(err);
-				return;
-			}
-			resolve(true);
-		});
-	});
+	return s3.putObject(params).promise();
 };
 
 //TODO - get a fresh copy of this file each time
@@ -136,15 +121,10 @@ var generate_signing_key = function() {
 	var item = {};
 	console.log(pubkeys_table);
 	// We should write the pubkey to S3 here too
-	return new Promise(function(resolve,reject) {
-		var pubkey = key.exportKey('pkcs1-public-pem');
-		dynamo.putItem({'TableName': pubkeys_table, 'Item' : { kid: { S: key_id }, key: { S: pubkey } } },function(err,result) {
-			if (err) {
-				reject(err);
-				return;
-			}
-			resolve({'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')});
-		});
+	var pubkey = key.exportKey('pkcs1-public-pem');
+	var params = {'TableName': pubkeys_table, 'Item' : { kid: { S: key_id }, key: { S: pubkey } } }
+	return dynamo.putItem(params).then(function(result) {
+		return {'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')};
 	});
 };
 
