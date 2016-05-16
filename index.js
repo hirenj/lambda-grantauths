@@ -1,3 +1,6 @@
+'use strict';
+/*jshint esversion: 6, node:true */
+
 /**
  * Lambda function to support JWT.
  * Used for authenticating API requests for API Gateway
@@ -10,13 +13,12 @@
 var jwt = require('jsonwebtoken');
 var jwkToPem = require('jwk-to-pem');
 var fs = require('fs');
-var AWS = require('aws-sdk');
+var AWS = require('lambda-helpers').AWS;
 
 var grants_table = '';
 var pubkeys_table = '';
 
 var bucket = 'gator';
-
 
 try {
     var config = require('./resources.conf.json');
@@ -26,69 +28,47 @@ try {
 } catch (e) {
 }
 
-require('es6-promise').polyfill();
-
 var get_certificates = Promise.resolve({'keys' : []});
-var retrieve_certs = function() {
-	get_certificates = new Promise(function(resolve,reject) {
-		var s3 = new AWS.S3({region:'us-east-1'});
-		var params = {
-			Bucket: bucket,
-			Key: 'conf/authcerts'
-		};
-		s3.getObject(params,function(err,result) {
-			if (err) {
-				reject(err);
-				return;
-			}
-			resolve(JSON.parse(result.Body.toString()));
-		});
+
+let retrieve_certs = function() {
+	let s3 = new AWS.S3();
+	let params = {
+		Bucket: bucket,
+		Key: 'conf/authcerts'
+	};
+
+	get_certificates = s3.getObject(params).promise().then(function(result){
+		return JSON.parse(result.Body.toString());
 	});
 	return get_certificates;
 };
 
+// When we load up this module, make
+// sure that the certificates are loaded up
+
 retrieve_certs();
 
 var write_certificates = function(certs) {
-	var s3 = new AWS.S3({region:'us-east-1'});
-	var params = {
+	let s3 = new AWS.S3();
+	let params = {
 		Bucket: bucket,
 		Key: 'conf/authcerts',
 		Body: JSON.stringify(certs),
 		ACL: 'public-read'
 	};
-	return new Promise(function(resolve,reject) {
-		s3.putObject(params,function(err,result) {
-			if (err) {
-				reject(err);
-				return;
-			}
-			resolve(true);
-		});
-	});
+	return s3.putObject(params).promise();
 };
 
-//TODO - get a fresh copy of this file each time
-//we deploy this function
-// Microsoft keys from
-// https://login.microsoftonline.com/common/discovery/v2.0/keys
-// Derived from https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration (jwks_uri)
-
-// Google keys from
-// https://accounts.google.com/.well-known/openid-configuration
-// https://www.googleapis.com/oauth2/v3/certs
-// var certs = JSON.parse(fs.readFileSync('certs.json')).keys;
-
-var tennants = JSON.parse(fs.readFileSync('tennants.json'));
+const tennants = JSON.parse(fs.readFileSync('tennants.json'));
 
 var valid_microsoft_tennant = function(tennant_id) {
 	return Object.keys(tennants).filter(function(tennant) {
-		return tennants[tennant].id = tennant_id;
+		return tennants[tennant].id == tennant_id;
 	});
-}
+};
 
 function generatePolicyDocument(principalId, effect, resource) {
-	var authResponse = {};
+	let authResponse = {};
 	authResponse.principalId = principalId;
 	if (effect && resource) {
 		var policyDocument = {};
@@ -105,7 +85,7 @@ function generatePolicyDocument(principalId, effect, resource) {
 }
 
 var summarise_sets = function(grants) {
-	var datasets = {};
+	let datasets = {};
 	grants.forEach(function(grant) {
 		(grant.sets || '').split(',').forEach(function(set) {
 			if (! datasets[set]) {
@@ -127,94 +107,78 @@ var summarise_sets = function(grants) {
 };
 
 var generate_signing_key = function() {
-	var NodeRSA = require('node-rsa');
-	var uuid = require('node-uuid');
-	var key_id = uuid.v4();
-	var key = new NodeRSA({b: 512 });
-	var AWS = require('aws-sdk');
-	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
-	var item = {};
-	console.log(pubkeys_table);
+	let NodeRSA = require('node-rsa');
+	let uuid = require('node-uuid');
+	let key_id = uuid.v4();
+	let key = new NodeRSA({b: 512 });
+	let dynamo = new AWS.DynamoDB();
 	// We should write the pubkey to S3 here too
-	return new Promise(function(resolve,reject) {
-		var pubkey = key.exportKey('pkcs1-public-pem');
-		dynamo.putItem({'TableName': pubkeys_table, 'Item' : { kid: { S: key_id }, key: { S: pubkey } } },function(err,result) {
-			if (err) {
-				reject(err);
-				return;
-			}
-			resolve({'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')});
-		});
+	let pubkey = key.exportKey('pkcs1-public-pem');
+	let params = {'TableName': pubkeys_table, 'Item' : { kid: { S: key_id }, key: { S: pubkey } } };
+	return dynamo.putItem(params).promise().then(function() {
+		return {'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')};
 	});
 };
 
 var get_signing_key = function(key_id) {
-	var params = {
-		AttributesToGet: [ "key" ],
+	let params = {
+		AttributesToGet: [ 'key' ],
 		TableName : pubkeys_table,
-		Key : { "kid" : { "S" : key_id } }
+		Key : { 'kid' : { 'S' : key_id } }
     };
-	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
-	return new Promise(function(resolve,reject) {
-		console.log("Getting signing pubkey");
-		dynamo.getItem(params,function(err,result) {
-			console.log("Got signing pubkey");
-			if (err) {
-				reject(err);
-				return;
-			}
-			resolve(result.Item.key.S);
-		});
-
+	let dynamo = new AWS.DynamoDB();
+	console.log('Getting signing pubkey');
+	return dynamo.getItem(params).promise().then(function(result) {
+		console.log('Got signing pubkey');
+		return(result.Item.key.S);
 	});
 };
 
 var get_userid_from_token = function(authorization) {
 	if ( ! authorization ) {
-		return "anonymous";
+		return 'anonymous';
 	}
-	var token = authorization.split(' ');
+	let token = authorization.split(' ');
 
-	if(token[0] !== 'Bearer') {
+	if( token[0] !== 'Bearer' ) {
 		throw new Error('Unauthorized');
 	}
 
 	var current_token = jwt.decode(token[1],{complete: true});
 
 	if (current_token.payload.iss == 'glycodomain') {
-		throw new Error("exchanged");
+		throw new Error('exchanged');
 	}
-	var user_id = null;
-	current_token.payload.sub;
+	let user_id = null;
 	if (current_token.payload.iss === 'accounts.google.com') {
 		user_id = current_token.payload.email;
 	}
 	if (current_token.payload.iss.match(/^https:\/\/login\.microsoftonline\.com\//)) {
-		var tennants = valid_microsoft_tennant(current_token.payload.tid);
-		if (tennants.length < 1) {
-			throw new Error("Not a valid tennant for microsoft login");
+		let valid_tennants = valid_microsoft_tennant(current_token.payload.tid);
+		if (valid_tennants.length < 1) {
+			throw new Error('Not a valid tennant for microsoft login');
 		}
 		user_id = current_token.payload.email || current_token.payload.preferred_username;
-		if ( ! user_id.match(tennants[0].email_pattern)) {
-			throw new Error("Microsoft account invalid tennant pattern");
+		if ( ! user_id.match(valid_tennants[0].email_pattern)) {
+			throw new Error('Microsoft account invalid tennant pattern');
 		}
 	}
 	if ( ! user_id ) {
-		throw new Error("No valid token provider");
+		throw new Error('No valid token provider');
 	}
 	return user_id;
 };
 
 var copy_token = function(authorization) {
 	if ( ! authorization ) {
-		throw new Error("No token to copy");
+		throw new Error('No token to copy');
 	}
-	var token = authorization.split(' ');
+	let token = authorization.split(' ');
 
-	var current_token = jwt.decode(token[1],{complete: true});
-	var earliest_expiry = Math.floor((new Date()).getTime() / 1000) + 86400;
+	let current_token = jwt.decode(token[1],{complete: true});
+	let earliest_expiry = Math.floor((new Date()).getTime() / 1000) + 86400;
 
-	var token_content = {
+	let token_content = {
 		'access' : current_token.payload.access,
 		'iss' : 'glycodomain',
 		'exp' : earliest_expiry,
@@ -222,60 +186,54 @@ var copy_token = function(authorization) {
 	};
 
 	return token_content;
-}
+};
 
 var get_grant_token = function(user_id) {
-	var params = {
+	let params = {
 		TableName : grants_table,
-		ProjectionExpression : "datasets,proteins,valid_from,valid_to",
-		FilterExpression: "contains(#usr,:userid) OR contains(#usr,:anon)",
+		ProjectionExpression : 'datasets,proteins,valid_from,valid_to',
+		FilterExpression: 'contains(#usr,:userid) OR contains(#usr,:anon)',
 		ExpressionAttributeNames:{
-		    "#usr": "users"
+		    '#usr': 'users'
 		},
 		ExpressionAttributeValues: {
-		    ":userid": { 'S' : user_id },
-		    ":anon" : { 'S' : 'anonymous'}
+		    ':userid': { 'S' : user_id },
+		    ':anon' : { 'S' : 'anonymous'}
 		}
 	};
-	var dynamo = new AWS.DynamoDB({region:'us-east-1'});
+	let dynamo = new AWS.DynamoDB();
 
-	return new Promise(function(resolve,reject) {
-		dynamo.scan(params,function(err,data) {
-			if (err) {
-				reject(err);
-				return;
+	return dynamo.scan(params).promise().then(function(data) {
+		let sets = [];
+		let earliest_expiry = Math.floor((new Date()).getTime() / 1000);
+
+		// Add a day to the expiry time, but we should
+		// be doing this depending on the user that is
+		// being supplied to us
+
+		earliest_expiry = earliest_expiry + 86400;
+
+		data.Items.forEach(function(grant) {
+			if (grant.valid_to.N < earliest_expiry ) {
+				earliest_expiry = grant.valid_to.N;
 			}
-			var sets = [];
-			var earliest_expiry = Math.floor((new Date()).getTime() / 1000);
-
-			// Add a day to the expiry time, but we should
-			// be doing this depending on the user that is
-			// being supplied to us
-
-			earliest_expiry = earliest_expiry + 86400;
-
-			data.Items.forEach(function(grant) {
-				if (grant.valid_to.N < earliest_expiry ) {
-					earliest_expiry = grant.valid_to.N;
-				}
-				sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
-			});
-			var summary_grant = summarise_sets(sets);
-
-			var token_content = {
-				'access' : summary_grant,
-				'iss' : 'glycodomain',
-				'exp' : earliest_expiry,
-				'sub' : user_id,
-			};
-			resolve(token_content);
+			sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
 		});
+		let summary_grant = summarise_sets(sets);
+
+		let token_content = {
+			'access' : summary_grant,
+			'iss' : 'glycodomain',
+			'exp' : earliest_expiry,
+			'sub' : user_id,
+		};
+		return token_content;
 	});
 };
 
 var get_signed_token = function(token_content) {
 	return generate_signing_key().then(function(key) {
-		return new Promise(function(resolve,reject) {
+		return new Promise(function(resolve) {
 			jwt.sign(token_content,key.private,{'algorithm' : 'RS256', 'headers' : { 'kid' : key.kid } }, function(token) {
 				resolve(token);
 			});
@@ -315,16 +273,16 @@ exports.exchangetoken = function exchangetoken(event,context) {
 	// Read the current JWT
 	console.log(JSON.stringify(event));
 
-	var get_userid = Promise.resolve(true).then(function() {
+	let get_userid = Promise.resolve(true).then(function() {
 		return get_userid_from_token(event.Authorization,context);
 	});
 
 	// Read the capabilities from the grants table for the user
 	// Encode into new JWT
 
-	var result = get_userid.then(get_grant_token).catch(function(err) {
+	let result = get_userid.then(get_grant_token).catch(function(err) {
 		if (err.message == 'exchanged') {
-			console.log("Renewing token");
+			console.log('Renewing token');
 			return copy_token(event.Authorization);
 		}
 	}).then(get_signed_token);
@@ -335,7 +293,7 @@ exports.exchangetoken = function exchangetoken(event,context) {
 		console.error(err);
 		console.error(err.stack);
 		context.fail('Unauthorized');
-	})
+	});
 
 
 	// what happens when a user has a new set of capabilities
@@ -358,10 +316,17 @@ var jwt_verify = function(token,cert) {
 	});
 };
 
+var is_valid_timestamp = function(decoded_token) {
+	if (! decoded_token.exp || decoded_token.exp < Math.floor((new Date()).getTime() / 1000)) {
+		return Promise.reject(new Error('Expired'));
+	}
+	return Promise.resolve(true);
+};
+
 var accept_openid_connect_token = function(token) {
-	console.log("Trying to validate bearer on openid token "+token);
-	var decoded = jwt.decode(token,{complete: true});
-	var cert_id = decoded.header.kid;
+	console.log('Trying to validate bearer on openid token '+token);
+	let decoded = jwt.decode(token,{complete: true});
+	let cert_id = decoded.header.kid;
 
 	// FIXME - We should be checking timestamps on the JWT
 	// so that we aren't accepting ancient tokens, just
@@ -380,27 +345,20 @@ var accept_openid_connect_token = function(token) {
 	});
 };
 
-var is_valid_timestamp = function(decoded_token) {
-	if (! decoded_token.exp || decoded_token.exp < Math.floor((new Date()).getTime() / 1000)) {
-		return Promise.reject(new Error('Expired'));
-	}
-	return Promise.resolve(true);
-}
-
 var accept_self_token = function(token,anonymous) {
-	console.log("Trying to validate bearer on self token "+token);
-	var decoded = jwt.decode(token,{complete: true});
-	var cert_id = decoded.header.kid;
-	console.log("Decoded token");
+	console.log('Trying to validate bearer on self token '+token);
+	let decoded = jwt.decode(token,{complete: true});
+	let cert_id = decoded.header.kid;
+	console.log('Decoded token');
 
 	return is_valid_timestamp(decoded.payload).then(function() {
-		console.log("Trying to get cert ",cert_id);
+		console.log('Trying to get cert ',cert_id);
 		return get_signing_key(cert_id);
 	}).then(function(cert) {
-		console.log("Trying to verify JWT using cert ",cert);
+		console.log('Trying to verify JWT using cert ',cert);
 		return jwt_verify(token,cert);
 	}).then(function(data) {
-		console.log("Done verifying");
+		console.log('Done verifying');
 		if (data && data.sub && (! anonymous && data.sub !== 'anonymous') || (data.sub === 'anonymous' && anonymous) ){
 			console.log('LOGIN', data);
 			// Restrict the functions to only the token exchange user
@@ -413,8 +371,8 @@ var accept_self_token = function(token,anonymous) {
 };
 
 var accept_token = function(token) {
-	var decoded_token = jwt.decode(token);
-	var validation_promise = null;
+	let decoded_token = jwt.decode(token);
+	let validation_promise = null;
 	if (decoded_token.iss === 'glycodomain' && decoded_token.sub !== 'anonymous') {
 		// This is one of our own tokens
 		validation_promise = accept_self_token(token);
@@ -432,16 +390,16 @@ var accept_token = function(token) {
 };
 
 var check_data_access = function(token,dataset,protein_id) {
-	var grants = jwt.decode(token).access;
-	var valid = false;
-	var dataset_parts = dataset.split(':');
-	var group = dataset_parts[0];
-	var set_id = dataset_parts[1];
+	let grants = jwt.decode(token).access;
+	let valid = false;
+	let dataset_parts = dataset.split(':');
+	let group = dataset_parts[0];
+	let set_id = dataset_parts[1];
 	console.log(grants);
 	console.log(group,set_id);
 	Object.keys(grants).forEach(function(set) {
-		var grant_set_parts = set.split('/');
-		var valid_set = false;
+		let grant_set_parts = set.split('/');
+		let valid_set = false;
 		if (grant_set_parts[0] === group && (grant_set_parts[1] === '*' || grant_set_parts[1] === set_id )) {
 			valid_set = true;
 		}
@@ -474,9 +432,9 @@ var check_data_access = function(token,dataset,protein_id) {
 //   - Dynamodb read publickey table
 exports.datahandler = function datahandler(event,context) {
 	console.log(JSON.stringify(event));
-	var token = event.authorizationToken.split(' ');
-	var target = event.methodArn.split(':').slice(5).join(':');
-	var resource = target.split('/data/latest/')[1].split('/');
+	let token = event.authorizationToken.split(' ');
+	let target = event.methodArn.split(':').slice(5).join(':');
+	let resource = target.split('/data/latest/')[1].split('/');
 	console.log(resource);
 	if(token[0] === 'Bearer'){
 		Promise.all([
@@ -487,10 +445,10 @@ exports.datahandler = function datahandler(event,context) {
 		}).catch(function(err) {
 			console.error(err);
 			console.error(err.stack);
-			context.succeed(generatePolicyDocument("user", 'Deny', event.methodArn));
+			context.succeed(generatePolicyDocument('user', 'Deny', event.methodArn));
 		});
 	} else {
-		// Require a "Bearer" token
+		// Require a 'Bearer' token
 		console.log('Wrong token type', token[0]);
 		context.fail('Unauthorized');
 	}
@@ -498,12 +456,12 @@ exports.datahandler = function datahandler(event,context) {
 
 /**
  * Handle requests from API Gateway
- * "event" is an object with an "authorizationToken"
+ * 'event' is an object with an 'authorizationToken'
  */
 // Permissions: Roles readPublicKey
 //   - Dynamodb read publickey table
 exports.loginhandler = function jwtHandler(event, context){
-	var token = event.authorizationToken.split(' ');
+	let token = event.authorizationToken.split(' ');
 	if(token[0] === 'Bearer'){
 		accept_token(token[1]).then(function(token) {
 			context.succeed(generatePolicyDocument(token.sub, 'Allow', event.methodArn));
@@ -511,29 +469,13 @@ exports.loginhandler = function jwtHandler(event, context){
 			context.fail(err.message);
 		});
 	} else {
-		// Require a "Bearer" token
+		// Require a 'Bearer' token
 		console.log('Wrong token type', token[0]);
 		context.fail('Unauthorized');
 	}
 };
 
-var get_file = function(url) {
-	return new Promise(function(resolve,reject) {
-		require('https').get(url, function(res) {
-			res.setEncoding('utf8');
-			var body = '';
-			res.on('data', function(chunk) {
-				body += chunk;
-			});
-			res.on('end', function() {
-				body = JSON.parse(body);
-				resolve(body);
-			});
-		}).on('error',function(err) {
-			reject(err);
-		});
-	});
-};
+const get_file = require('lambda-helpers').get_file;
 
 var get_jwks = function(conf_url) {
 	return get_file(conf_url).then(function(conf) {
@@ -541,25 +483,36 @@ var get_jwks = function(conf_url) {
 	});
 };
 
+// Microsoft keys from
+// https://login.microsoftonline.com/common/discovery/v2.0/keys
+// Derived from https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration (jwks_uri)
+
+// Google keys from
+// https://accounts.google.com/.well-known/openid-configuration
+// https://www.googleapis.com/oauth2/v3/certs
+
+const google_conf = 'https://accounts.google.com/.well-known/openid-configuration';
+const ms_conf = 'https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration';
+
 exports.updateCertificates = function updateCertificates(event,context) {
-	// retrieve_certs().then(function() {
-	// 	context.succeed("Here");
-	// }).catch(function(err) {
-	// 	context.succeed("There");
-	// });
-	var google_conf = "https://accounts.google.com/.well-known/openid-configuration";
-	var ms_conf = "https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration";
+	let events = require('lambda-helpers').events;
 	Promise.all( [ get_jwks(ms_conf), get_jwks(google_conf) ] ).then(function(configs) {
-		var confs = configs.reduce(function(curr,next) { if ( ! curr ) { return next; } curr.keys = curr.keys.concat(next.keys); return curr; });
+		let confs = configs.reduce(function(curr,next) {
+			if ( ! curr ) {
+				return next;
+			}
+			curr.keys = curr.keys.concat(next.keys);
+			return curr;
+		});
 		return write_certificates(confs);
 	}).then(function() {
-		return require('./events').setInterval('updateCertificates','12 hours').then(function() {
-			return require('./events').subscribe('updateCertificates',context.invokedFunctionArn,{});
+		return events.setInterval('updateCertificates','12 hours').then(function() {
+			return events.subscribe('updateCertificates',context.invokedFunctionArn,{});
 		});
 	}).then(function() {
 		context.succeed('OK');
 	}).catch(function(err) {
 		console.log(err);
-		context.fail("NOT OK");
+		context.fail('NOT OK');
 	});
 };

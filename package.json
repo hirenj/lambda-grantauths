@@ -4,7 +4,9 @@
   "description": "API Gateway Lambda function to support JSON Web Tokens",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "./node_modules/jshint/bin/jshint index.js",
+    "validate": "npm ls"
   },
   "repository": {
     "type": "git",
@@ -24,7 +26,7 @@
   },
   "homepage": "https://github.com/kopertop/lambda-jwt#readme",
   "dependencies": {
-    "es6-promise": "^3.1.2",
+    "lambda-helpers": "hirenj/lambda-helpers",
     "jsonwebtoken": "^5.5.4",
     "jwk-to-pem": "^1.2.5",
     "node-rsa": "^0.3.2",
@@ -35,6 +37,11 @@
     "grunt-aws": "^0.6.1",
     "grunt-aws-lambda": "^0.11.0",
     "grunt-env": "^0.4.4",
-    "load-grunt-tasks": "^3.4.0"
-  }
+    "jshint": "^2.9.2",
+    "load-grunt-tasks": "^3.4.0",
+    "precommit-hook": "^3.0.0"
+  },
+  "pre-commit": [
+    "lint"
+  ]
 }
