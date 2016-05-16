@@ -1,4 +1,6 @@
 'use strict';
+/*jshint esversion: 6, node:true */
+
 /**
  * Lambda function to support JWT.
  * Used for authenticating API requests for API Gateway
@@ -36,7 +38,7 @@ let retrieve_certs = function() {
 	};
 
 	get_certificates = s3.getObject(params).promise().then(function(result){
-		JSON.parse(result.Body.toString())
+		JSON.parse(result.Body.toString());
 	});
 	return get_certificates;
 };
@@ -61,9 +63,9 @@ const tennants = JSON.parse(fs.readFileSync('tennants.json'));
 
 var valid_microsoft_tennant = function(tennant_id) {
 	return Object.keys(tennants).filter(function(tennant) {
-		return tennants[tennant].id = tennant_id;
+		return tennants[tennant].id == tennant_id;
 	});
-}
+};
 
 function generatePolicyDocument(principalId, effect, resource) {
 	let authResponse = {};
@@ -110,11 +112,10 @@ var generate_signing_key = function() {
 	let key_id = uuid.v4();
 	let key = new NodeRSA({b: 512 });
 	let dynamo = new AWS.DynamoDB();
-	let item = {};
 	// We should write the pubkey to S3 here too
 	let pubkey = key.exportKey('pkcs1-public-pem');
-	let params = {'TableName': pubkeys_table, 'Item' : { kid: { S: key_id }, key: { S: pubkey } } }
-	return dynamo.putItem(params).promise().then(function(result) {
+	let params = {'TableName': pubkeys_table, 'Item' : { kid: { S: key_id }, key: { S: pubkey } } };
+	return dynamo.putItem(params).promise().then(function() {
 		return {'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')};
 	});
 };
@@ -149,7 +150,6 @@ var get_userid_from_token = function(authorization) {
 		throw new Error('exchanged');
 	}
 	let user_id = null;
-	current_token.payload.sub;
 	if (current_token.payload.iss === 'accounts.google.com') {
 		user_id = current_token.payload.email;
 	}
@@ -186,7 +186,7 @@ var copy_token = function(authorization) {
 	};
 
 	return token_content;
-}
+};
 
 var get_grant_token = function(user_id) {
 	let params = {
@@ -233,7 +233,7 @@ var get_grant_token = function(user_id) {
 
 var get_signed_token = function(token_content) {
 	return generate_signing_key().then(function(key) {
-		return new Promise(function(resolve,reject) {
+		return new Promise(function(resolve) {
 			jwt.sign(token_content,key.private,{'algorithm' : 'RS256', 'headers' : { 'kid' : key.kid } }, function(token) {
 				resolve(token);
 			});
@@ -316,6 +316,13 @@ var jwt_verify = function(token,cert) {
 	});
 };
 
+var is_valid_timestamp = function(decoded_token) {
+	if (! decoded_token.exp || decoded_token.exp < Math.floor((new Date()).getTime() / 1000)) {
+		return Promise.reject(new Error('Expired'));
+	}
+	return Promise.resolve(true);
+};
+
 var accept_openid_connect_token = function(token) {
 	console.log('Trying to validate bearer on openid token '+token);
 	let decoded = jwt.decode(token,{complete: true});
@@ -336,13 +343,6 @@ var accept_openid_connect_token = function(token) {
 			throw new Error('Unauthorized');
 		}
 	});
-};
-
-var is_valid_timestamp = function(decoded_token) {
-	if (! decoded_token.exp || decoded_token.exp < Math.floor((new Date()).getTime() / 1000)) {
-		return Promise.reject(new Error('Expired'));
-	}
-	return Promise.resolve(true);
 };
 
 var accept_self_token = function(token,anonymous) {
