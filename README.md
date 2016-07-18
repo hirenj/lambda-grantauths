@@ -1,35 +1,13 @@
-Lambda API Gateway support for JSON Web Tokens
-==============================================
+# Auth tokens for various providers, and how to get them
 
-API Gateway custom Lambda function for JSON Web Token: https://jwt.io/introduction/
+## Azure AD and windows live
 
-
-To Generate your own private key
---------------------------------
-```
-openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -nodes
-```
-
-
-Upload to AWS
--------------
-
-Log into the AWS console and create an empty "jwtAuthorize" function using Node.js.
-
-Create or copy your public key as "cert.pem" in this folder.
-
-
-Run
+https://azure.microsoft.com/en-us/documentation/articles/active-directory-v2-protocols-implicit/
 
 ```
-npm install
-grunt deploy --account-id=<your account id>
+https://login.microsoftonline.com/common/oauth2/v2.0/authorize?scope=openid%20profile%20email%20Notes.ReadWrite&response_mode=fragment&nonce=12345&response_type=token+id_token&state=12345&client_id=client_id&redirect_url=redirect_url
 ```
 
-Tie this function to your AWS API Gateway
------------------------------------------
-
-Go to the AWS console and choose your API gateway. Under "Resources" choose "Custom Authorizers".
-Create a new authorizer with the identityToken source of `method.request.header.Authorization`
-and a Token validation expression of `Bearer [^\.]+\.[^\.]+\.[^\.]+` and associate it with your newly
-created jwtAuthorizer Lambda function.
+```
+email = token.preferred_username
+```
