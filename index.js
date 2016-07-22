@@ -433,6 +433,10 @@ exports.datahandler = function datahandler(event,context) {
 	console.log(JSON.stringify(event));
 	let token = event.authorizationToken.split(' ');
 	let target = event.methodArn.split(':').slice(5).join(':');
+	console.log("Desired target is ",target);
+	if (target.match('/GET/doi/')) {
+		target = '/data/latest/combined/publications';
+	}
 	let resource = target.split('/data/latest/')[1].split('/');
 	console.log("Checking access for",resource);
 	if(token[0] === 'Bearer'){
