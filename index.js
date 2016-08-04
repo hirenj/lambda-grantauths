@@ -460,7 +460,7 @@ exports.datahandler = function datahandler(event,context) {
  */
 // Permissions: Roles readPublicKey
 //   - Dynamodb read publickey table
-exports.loginhandler = function jwtHandler(event, context){
+exports.loginhandler = function loginhandler(event, context){
   let token = event.authorizationToken.split(' ');
   if(token[0] === 'Bearer'){
     accept_token(token[1]).then(function(token) {
