@@ -251,9 +251,7 @@ var get_signed_token = function(token_content) {
 /**
  * Check authorisation for requests asking for data
  */
-// Permissions: Roles managePublicKey, grantReader
-//   - Dynamodb read publickey table
-//   - Dynamodb write publickey table
+// Permissions: Roles grantReader
 //   - Dynamodb read grants table
 exports.exchangetoken = function exchangetoken(event,context) {
   // Read the current JWT
@@ -413,8 +411,6 @@ var check_data_access = function(token,dataset,protein_id) {
 /**
  * Check authorisation for requests asking for data
  */
-// Permissions: Roles readPublicKey
-//   - Dynamodb read publickey table
 exports.datahandler = function datahandler(event,context) {
   console.log(JSON.stringify(event));
   let token = event.authorizationToken.split(' ');
@@ -447,8 +443,6 @@ exports.datahandler = function datahandler(event,context) {
  * Handle requests from API Gateway
  * 'event' is an object with an 'authorizationToken'
  */
-// Permissions: Roles readPublicKey
-//   - Dynamodb read publickey table
 exports.loginhandler = function loginhandler(event, context){
   let token = event.authorizationToken.split(' ');
   if(token[0] === 'Bearer'){
@@ -464,44 +458,3 @@ exports.loginhandler = function loginhandler(event, context){
   }
 };
 
-const get_file = require('lambda-helpers').get_file;
-
-var get_jwks = function(conf_url) {
-  return get_file(conf_url).then(function(conf) {
-    return get_file(conf.jwks_uri);
-  });
-};
-
-// Microsoft keys from
-// https://login.microsoftonline.com/common/discovery/v2.0/keys
-// Derived from https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration (jwks_uri)
-
-// Google keys from
-// https://accounts.google.com/.well-known/openid-configuration
-// https://www.googleapis.com/oauth2/v3/certs
-
-const google_conf = 'https://accounts.google.com/.well-known/openid-configuration';
-const ms_conf = 'https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration';
-
-exports.updateCertificates = function updateCertificates(event,context) {
-  let events = require('lambda-helpers').events;
-  Promise.all( [ get_jwks(ms_conf), get_jwks(google_conf) ] ).then(function(configs) {
-    let confs = configs.reduce(function(curr,next) {
-      if ( ! curr ) {
-        return next;
-      }
-      curr.keys = curr.keys.concat(next.keys);
-      return curr;
-    });
-    return write_certificates(confs);
-  }).then(function() {
-    return events.setInterval('updateCertificates','12 hours').then(function() {
-      return events.subscribe('updateCertificates',context.invokedFunctionArn,{});
-    });
-  }).then(function() {
-    context.succeed('OK');
-  }).catch(function(err) {
-    console.log(err);
-    context.fail('NOT OK');
-  });
-};

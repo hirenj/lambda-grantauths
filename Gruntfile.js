@@ -52,15 +52,6 @@ module.exports = function(grunt) {
 				},
 				function: config.functions['datahandler'] || 'datahandler',
 				arn: null,
-			},
-			updateCertificates: {
-				package: 'jwtAuthorize',
-				options: {
-					file_name: 'index.js',
-					handler: 'index.updateCertificates',
-				},
-				function: config.functions['updateCertificates'] || 'updateCertificates',
-				arn: null,
 			}
 		},
 		lambda_package: {
@@ -72,9 +63,6 @@ module.exports = function(grunt) {
 			},
 			datahandler: {
 				package: 'jwtAuthorize',
-			},
-			updateCertificates: {
-				package: 'jwtAuthorize',
 			}
 		},
 		env: {
@@ -85,10 +73,29 @@ module.exports = function(grunt) {
 
 	});
 
-	grunt.registerTask('deploy', ['env:prod', 'lambda_package', 'lambda_deploy']);
-	grunt.registerTask('deploy:loginhandler', ['env:prod', 'lambda_package:loginhandler', 'lambda_deploy:loginhandler']);
-	grunt.registerTask('deploy:datahandler', ['env:prod', 'lambda_package:datahandler', 'lambda_deploy:datahandler']);
-	grunt.registerTask('deploy:exchangeToken', ['env:prod', 'lambda_package:exchangeToken', 'lambda_deploy:exchangeToken']);
-	grunt.registerTask('deploy:updateCertificates', ['env:prod', 'lambda_package:updateCertificates', 'lambda_deploy:updateCertificates']);
+	grunt.registerTask('rotateCertificates',function() {
+		var AWS = require('lambda-helpers').AWS;
+		var lambda = new AWS.Lambda();
+		var done = this.async();
+		var params = {
+			FunctionName: config.functions['rotateCertificates'],
+			InvocationType: 'RequestResponse',
+			LogType: 'Tail',
+			Payload: '{}'
+		};
+		lambda.invoke(params).promise().then(function(result) {
+			console.log(result.Payload);
+			console.log(new Buffer(result.LogResult,"base64").toString());
+		}).catch(function(err) {
+			console.log(err.stack,err);
+		}).then(function() {
+			done();
+		});
+	});
+
+	grunt.registerTask('deploy', ['env:prod', 'lambda_package', 'lambda_deploy', 'rotateCertificates']);
+	grunt.registerTask('deploy:loginhandler', ['env:prod', 'lambda_package:loginhandler', 'lambda_deploy:loginhandler', 'rotateCertificates']);
+	grunt.registerTask('deploy:datahandler', ['env:prod', 'lambda_package:datahandler', 'lambda_deploy:datahandler', 'rotateCertificates']);
+	grunt.registerTask('deploy:exchangeToken', ['env:prod', 'lambda_package:exchangeToken', 'lambda_deploy:exchangeToken', 'rotateCertificates']);
 	grunt.registerTask('test', ['lambda_invoke']);
 };
