@@ -327,7 +327,7 @@ var accept_openid_connect_token = function(token) {
   // FIXME - We should be checking timestamps on the JWT
   // so that we aren't accepting ancient tokens, just
   // in case someone tries to do that.
-  return is_valid_timestamp(decoded.payload).then(retrieve_certs).then(function(certs) {
+  return is_valid_timestamp(decoded.payload).then(() => get_certificates).then(function(certs) {
     return jwt_verify(token, jwkToPem(certs.keys.filter(function(cert) { return cert.kid == cert_id; })[0]) );
   }).then(function(data){
     if (data && data.iss && data.iss == 'accounts.google.com'){
