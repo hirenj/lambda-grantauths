@@ -31,28 +31,6 @@
         }
       }
     },
-    "pubkeys": {
-      "Type": "AWS::DynamoDB::Table",
-      "Properties": {
-        "TableName" : { "Fn::Join" :  [ "-", [ { "Ref" : "AWS::StackName" }, "pubkeys" ] ] },
-        "AttributeDefinitions": [
-          {
-            "AttributeName": "kid",
-            "AttributeType": "S"
-          }
-        ],
-        "KeySchema": [
-          {
-            "AttributeName": "kid",
-            "KeyType": "HASH"
-          }
-        ],
-        "ProvisionedThroughput": {
-          "ReadCapacityUnits": "2",
-          "WriteCapacityUnits": "1"
-        }
-      }
-    },
     "AuthLogWriterPolicy": {
       "Type": "AWS::IAM::Policy",
       "Properties" : {
@@ -96,7 +74,7 @@
     "LambdaExchangetokenRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "ReadJWTPubkeys" }, {"Ref" : "WriteJWTPubkeys"}, {"Ref" : "ReadGrants"} ],
+        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"} ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -114,7 +92,7 @@
     "LambdaDatahandlerRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "ReadJWTPubkeys" } ],
+        "ManagedPolicyArns" : [],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -132,7 +110,7 @@
     "LambdaLoginhandlerRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ { "Ref" : "ReadJWTPubkeys" } ],
+        "ManagedPolicyArns" : [],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -223,44 +201,6 @@
       },
       "DependsOn" : "LambdaLoginhandlerRole"
     },
-    "ReadJWTPubkeys": {
-      "Type": "AWS::IAM::ManagedPolicy",
-      "Properties" : {
-        "Description" : "ReadJWTPubkeys",
-        "PolicyDocument" : {
-            "Id" : "ReadJWTPubkeys",
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                  "Sid": "ReadJWTPubkeys",
-                  "Effect": "Allow",
-                  "Action": "dynamodb:GetItem",
-                  "Resource" : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":", { "Ref" : "AWS::AccountId" } ,":table/", { "Ref" : "pubkeys" } ] ]}
-                }
-            ]
-        }
-      },
-      "DependsOn": "pubkeys"
-    },
-    "WriteJWTPubkeys": {
-      "Type": "AWS::IAM::ManagedPolicy",
-      "Properties" : {
-        "Description" : "ReadJWTPubkeys",
-        "PolicyDocument" : {
-            "Id" : "WriteJWTPubkeys",
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                  "Sid": "WriteJWTPubkeys",
-                  "Effect": "Allow",
-                  "Action": "dynamodb:PutItem",
-                  "Resource" : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":", { "Ref" : "AWS::AccountId" } ,":table/", { "Ref" : "pubkeys" } ] ]}
-                }
-            ]
-        }
-      },
-      "DependsOn": "pubkeys"
-    },
     "ReadGrants" : {
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties" : {
@@ -350,10 +290,6 @@
     }
   },
   "Outputs": {
-    "pubkeysTablename": {
-      "Description": "Table name for pubkeys",
-      "Value": { "Ref" : "pubkeys"}
-    },
     "WriteGrants" : {
       "Description" : "Arn for writing grants policy",
       "Value" : { "Ref" : "WriteGrants"}
