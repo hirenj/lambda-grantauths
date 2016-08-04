@@ -27,15 +27,21 @@ try {
 
 var get_certificates = Promise.resolve({'keys' : []});
 
-let retrieve_certs = function() {
-  let s3 = new AWS.S3();
-  let params = {
-    Bucket: bucket,
-    Key: 'conf/authcerts'
-  };
+let read_file = function(filename) {
+  return new Promise(function(resolve,reject) {
+    fs.readFile(filename,function(err,data) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(data);
+      }
+    });
+  });
+};
 
-  get_certificates = s3.getObject(params).promise().then(function(result){
-    return JSON.parse(result.Body.toString());
+let retrieve_certs = function() {
+  get_certificates = read_file('public_keys').then(function(result){
+    return JSON.parse(result.toString());
   });
   return get_certificates;
 };
@@ -104,30 +110,13 @@ var summarise_sets = function(grants) {
 };
 
 var generate_signing_key = function() {
-  let NodeRSA = require('node-rsa');
-  let uuid = require('node-uuid');
-  let key_id = uuid.v4();
-  let key = new NodeRSA({b: 512 });
-  let dynamo = new AWS.DynamoDB();
-  // We should write the pubkey to S3 here too
-  let pubkey = key.exportKey('pkcs1-public-pem');
-  let params = {'TableName': pubkeys_table, 'Item' : { kid: { S: key_id }, key: { S: pubkey } } };
-  return dynamo.putItem(params).promise().then(function() {
-    return {'kid' : key_id, 'private' : key.exportKey('pkcs1-private-pem')};
-  });
+  return read_file('private').then((dat) => JSON.parse(dat));
 };
 
 var get_signing_key = function(key_id) {
-  let params = {
-    AttributesToGet: [ 'key' ],
-    TableName : pubkeys_table,
-    Key : { 'kid' : { 'S' : key_id } }
-    };
-  let dynamo = new AWS.DynamoDB();
-  console.log('Getting signing pubkey');
-  return dynamo.getItem(params).promise().then(function(result) {
-    console.log('Got signing pubkey');
-    return(result.Item.key.S);
+  return get_certificates.then(function(certs) {
+    console.log(certs.keys.map((key) => key.kid ).join(','));
+    return jwkToPem(certs.keys.filter(function(cert) { return cert.kid == key_id; })[0])
   });
 };
 
