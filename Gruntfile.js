@@ -32,6 +32,7 @@ module.exports = function(grunt) {
 					file_name: 'index.js',
 					handler: 'loginhandler',
 				},
+        region: config.region,
 				function: config.functions['loginhandler'] || 'loginhandler',
 				arn: null,
 			},
@@ -41,6 +42,7 @@ module.exports = function(grunt) {
 					file_name: 'index.js',
 					handler: 'index.exchangetoken',
 				},
+        region: config.region,
 				function: config.functions['exchangetoken'] || 'exchangetoken',
 				arn: null,
 			},
@@ -50,6 +52,7 @@ module.exports = function(grunt) {
 					file_name: 'index.js',
 					handler: 'index.datahandler',
 				},
+        region: config.region,
 				function: config.functions['datahandler'] || 'datahandler',
 				arn: null,
 			}
