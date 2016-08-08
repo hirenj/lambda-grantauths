@@ -17,12 +17,18 @@ var pubkeys_table = '';
 
 var bucket = 'gator';
 
+let config = {};
+
 try {
-    var config = require('./resources.conf.json');
+    config = require('./resources.conf.json');
     pubkeys_table = config.tables.pubkeys;
     grants_table = config.tables.grants;
     bucket = config.buckets.dataBucket;
 } catch (e) {
+}
+
+if (config.region) {
+  require('lambda-helpers').AWS.setRegion(config.region);
 }
 
 var get_certificates = Promise.resolve({'keys' : []});
