@@ -13,7 +13,6 @@ module.exports = function(grunt) {
 		config = require('./resources.conf.json');
 	} catch (e) {
 	}
-
 	grunt.initConfig({
 		lambda_invoke: {
 			loginhandler: {
@@ -31,8 +30,8 @@ module.exports = function(grunt) {
 				options: {
 					file_name: 'index.js',
 					handler: 'loginhandler',
+					region: config.region,
 				},
-        region: config.region,
 				function: config.functions['loginhandler'] || 'loginhandler',
 				arn: null,
 			},
@@ -41,8 +40,8 @@ module.exports = function(grunt) {
 				options: {
 					file_name: 'index.js',
 					handler: 'index.exchangetoken',
+					region: config.region,
 				},
-        region: config.region,
 				function: config.functions['exchangetoken'] || 'exchangetoken',
 				arn: null,
 			},
@@ -51,8 +50,8 @@ module.exports = function(grunt) {
 				options: {
 					file_name: 'index.js',
 					handler: 'index.datahandler',
+					region: config.region,
 				},
-        region: config.region,
 				function: config.functions['datahandler'] || 'datahandler',
 				arn: null,
 			}
@@ -78,6 +77,7 @@ module.exports = function(grunt) {
 
 	grunt.registerTask('rotateCertificates',function() {
 		var AWS = require('lambda-helpers').AWS;
+		AWS.setRegion(config.region);
 		var lambda = new AWS.Lambda();
 		var done = this.async();
 		var params = {
