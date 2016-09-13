@@ -422,7 +422,7 @@ exports.datahandler = function datahandler(event,context) {
   let token = event.authorizationToken.split(' ');
   let target = event.methodArn.split(':').slice(5).join(':');
   console.log("Desired target is ",target);
-  if (target.match('/GET/doi/')) {
+  if (target.match('/GET/doi/') || target.match('/GET/metadata')) {
     target = '/data/latest/combined/publications';
   }
   let resource = target.split('/data/latest/')[1].split('/');
