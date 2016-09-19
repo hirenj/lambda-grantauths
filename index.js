@@ -57,17 +57,6 @@ let retrieve_certs = function() {
 
 retrieve_certs();
 
-var write_certificates = function(certs) {
-  let s3 = new AWS.S3();
-  let params = {
-    Bucket: bucket,
-    Key: 'conf/authcerts',
-    Body: JSON.stringify(certs),
-    ACL: 'public-read'
-  };
-  return s3.putObject(params).promise();
-};
-
 const tennants = JSON.parse(fs.readFileSync('tennants.json'));
 
 var valid_microsoft_tennant = function(tennant_id) {
@@ -122,7 +111,7 @@ var generate_signing_key = function() {
 var get_signing_key = function(key_id) {
   return get_certificates.then(function(certs) {
     console.log(certs.keys.map((key) => key.kid ).join(','));
-    return jwkToPem(certs.keys.filter(function(cert) { return cert.kid == key_id; })[0])
+    return jwkToPem(certs.keys.filter(function(cert) { return cert.kid == key_id; })[0]);
   });
 };
 
@@ -388,12 +377,12 @@ var check_data_access = function(token,dataset,protein_id) {
     set_id = group;
     group = '*';
   }
-  console.log("Grants for user ",grants);
-  console.log("Trying to get access to ",group,set_id);
+  console.log('Grants for user ',grants);
+  console.log('Trying to get access to ',group,set_id);
 
   if ((['combined','uniprot'].indexOf(set_id) >= 0) && group === '*') {
     valid = true;
-    console.log("Getting built-in dataset, not checking grants");
+    console.log('Getting built-in dataset, not checking grants');
   }
 
   if (! valid ) {
@@ -409,7 +398,7 @@ var check_data_access = function(token,dataset,protein_id) {
             valid = true;
           }
         });
-        console.log("Valid grants for",set,grants[set].join(','));
+        console.log('Valid grants for',set,grants[set].join(','));
         valid = valid || grants[set].filter(function(prot) { return prot.toLowerCase() === protein_id; }).length > 0;
       }
     });
@@ -431,12 +420,12 @@ exports.datahandler = function datahandler(event,context) {
   console.log(JSON.stringify(event));
   let token = event.authorizationToken.split(' ');
   let target = event.methodArn.split(':').slice(5).join(':');
-  console.log("Desired target is ",target);
+  console.log('Desired target is ',target);
   if (target.match('/GET/doi/') || target.match('/GET/metadata')) {
     target = '/data/latest/combined/publications';
   }
   let resource = target.split('/data/latest/')[1].split('/');
-  console.log("Checking access for",resource);
+  console.log('Checking access for',resource);
   if(token[0] === 'Bearer'){
     Promise.all([
       accept_token(token[1]),
