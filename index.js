@@ -384,27 +384,37 @@ var check_data_access = function(token,dataset,protein_id) {
   let dataset_parts = dataset.split(':');
   let group = dataset_parts[0];
   let set_id = dataset_parts[1];
+  if ( typeof set_id === 'undefined') {
+    set_id = group;
+    group = '*';
+  }
   console.log("Grants for user ",grants);
   console.log("Trying to get access to ",group,set_id);
-  Object.keys(grants).forEach(function(set) {
-    let grant_set_parts = set.split('/');
-    let valid_set = false;
-    if (grant_set_parts[0] === group && (grant_set_parts[1] === '*' || grant_set_parts[1] === set_id )) {
-      valid_set = true;
-    }
-    if (group === 'combined' && typeof set_id === 'undefined') {
-      valid_set = true;
-    }
-    if (valid_set) {
-      grants[set].forEach(function(grant_protein_id) {
-        if (grant_protein_id == '*') {
-          valid = true;
-        }
-      });
-      console.log("Valid grants for",set,grants[set].join(','));
-      valid = valid || grants[set].filter(function(prot) { return prot.toLowerCase() === protein_id; }).length > 0;
-    }
-  });
+
+  if ((['combined','uniprot'].indexOf(set_id) >= 0) && group === '*') {
+    valid = true;
+    console.log("Getting built-in dataset, not checking grants");
+  }
+
+  if (! valid ) {
+    Object.keys(grants).forEach(function(set) {
+      let grant_set_parts = set.split('/');
+      let valid_set = false;
+      if (grant_set_parts[0] === group && (grant_set_parts[1] === '*' || grant_set_parts[1] === set_id )) {
+        valid_set = true;
+      }
+      if (valid_set) {
+        grants[set].forEach(function(grant_protein_id) {
+          if (grant_protein_id == '*') {
+            valid = true;
+          }
+        });
+        console.log("Valid grants for",set,grants[set].join(','));
+        valid = valid || grants[set].filter(function(prot) { return prot.toLowerCase() === protein_id; }).length > 0;
+      }
+    });
+  }
+
   if (valid) {
     // We can also push through the valid datasets here
     // and shove it into the principalId field that can
