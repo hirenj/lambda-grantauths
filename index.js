@@ -380,7 +380,7 @@ var check_data_access = function(token,dataset,protein_id) {
   console.log('Grants for user ',grants);
   console.log('Trying to get access to ',group,set_id);
 
-  if ((['combined','uniprot'].indexOf(set_id) >= 0) && group === '*') {
+  if ((['combined','uniprot','homology'].indexOf(set_id) >= 0) && group === '*') {
     valid = true;
     console.log('Getting built-in dataset, not checking grants');
   }
