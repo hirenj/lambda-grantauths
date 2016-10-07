@@ -170,6 +170,7 @@ var copy_token = function(authorization) {
 };
 
 var get_grant_token = function(user_id) {
+  user_id = user_id.toLowerCase();
   let params = {
     TableName : grants_table,
     ProjectionExpression : 'datasets,proteins,valid_from,valid_to',
