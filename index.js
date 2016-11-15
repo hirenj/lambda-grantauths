@@ -65,17 +65,36 @@ var valid_microsoft_tennant = function(tennant_id) {
   });
 };
 
-function generatePolicyDocument(principalId, effect, resource) {
+const expand_resource = function(methodarn,grants) {
+  let method_base = methodarn.split('/').slice(0,2).join('/');
+  let all_resources = [
+    method_base + '/GET/data/latest/combined/*',
+    method_base + '/GET/data/latest/homology/*',
+    method_base + '/GET/data/latest/uniprot/*',
+    method_base + '/GET/metadata',
+    method_base + '/GET/doi/*'
+  ];
+  Object.keys(grants).forEach( (set) => {
+    if (grants[set].length == 1 && grants[set][0] == '*') {
+      all_resources.push(method_base + '/GET/data/latest/'+set+'/*');      
+    } else {
+      grants[set].forEach( (uniprot) => all_resources.push(method_base + '/GET/data/latest/'+set+'/'+uniprot.toLowerCase()) );
+    }
+  });
+  return all_resources;
+};
+
+function generatePolicyDocument(principalId, effect,methodarn,resource) {
   let authResponse = {};
-  authResponse.principalId = principalId;
-  if (effect && resource) {
+  authResponse.principalId = typeof principalId === 'string' ? principalId : JSON.stringify(principalId);
+  if (effect && methodarn) {
     var policyDocument = {};
     policyDocument.Version = '2012-10-17'; // default version
     policyDocument.Statement = [];
     var statementOne = {};
     statementOne.Action = 'execute-api:Invoke'; // default action
     statementOne.Effect = effect;
-    statementOne.Resource = resource;
+    statementOne.Resource = resource ? expand_resource(methodarn,resource) : methodarn;
     policyDocument.Statement[0] = statementOne;
     authResponse.policyDocument = policyDocument;
   }
@@ -201,6 +220,8 @@ var get_grant_token = function(user_id) {
       }
       sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
     });
+
+    // TODO - remove long sets of proteins
     let summary_grant = summarise_sets(sets);
 
     let token_content = {
@@ -409,9 +430,11 @@ var check_data_access = function(token,dataset,protein_id) {
     // We can also push through the valid datasets here
     // and shove it into the principalId field that can
     // then be decoded in the target function
-    return Promise.resolve(JSON.stringify(grants));
+    return Promise.resolve(grants);
   }
-  return Promise.reject(new Error('No access'));
+  let err = new Error('No access');
+  err.grants = grants;
+  return Promise.reject(err);
 };
 
 /**
@@ -428,15 +451,24 @@ exports.datahandler = function datahandler(event,context) {
   let resource = target.split('/data/latest/')[1].split('/');
   console.log('Checking access for',resource);
   if(token[0] === 'Bearer'){
+
+    // We should instead be generating a single complete
+    // policy document that can be reused all over the
+    // place, and then caching that.
+
+    // So we need to get the full set of datasets
+    // and the group ids for each of them
+    // so that we can populate the grants
+
     Promise.all([
       accept_token(token[1]),
       check_data_access(token[1],resource[0],resource[1].toLowerCase())
     ]).then(function(results) {
-      context.succeed(generatePolicyDocument(results[1], 'Allow', event.methodArn));
+      context.succeed(generatePolicyDocument(results[1], 'Allow', event.methodArn,results[1]));
     }).catch(function(err) {
       console.error(err);
       console.error(err.stack);
-      context.succeed(generatePolicyDocument('user', 'Deny', event.methodArn));
+      context.succeed(generatePolicyDocument(err.grants, 'Allow', event.methodArn,err.grants));
     });
   } else {
     // Require a 'Bearer' token
