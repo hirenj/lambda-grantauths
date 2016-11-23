@@ -33,6 +33,14 @@ if (config.region) {
 
 let dynamo = new AWS.DynamoDB();
 
+const all_sets = [];
+
+let datasetnames = dynamo.getItem({'TableName' : config.tables.data, 'Key' : { 'acc' : {'S' : 'metadata' }, 'dataset' : {'S': 'datasets' } }}).promise().then( (data) => {
+  console.log('Populating data sets');
+  all_sets.length = 0;
+  data.Item.sets.L.map( set => set.S ).forEach( set => all_sets.push(set));
+  console.log('We have ',all_sets.length, 'sets in total');
+});
 
 var get_certificates = Promise.resolve({'keys' : []});
 
@@ -67,45 +75,6 @@ var valid_microsoft_tennant = function(tennant_id) {
     return tennants[tennant].id == tennant_id;
   });
 };
-
-const all_sets = [
-    'public/glycodomain_10029',
-    'public/glycodomain_10090',
-    'public/glycodomain_10116',
-    'public/glycodomain_559292',
-    'public/glycodomain_6239',
-    'public/glycodomain_7227',
-    'public/glycodomain_9606',
-    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCQWdzbVhQckZJc1k',
-    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCQnR5V0NMMkNPZ2s',
-    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCRXhiRFROX2paMU0',
-    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCTGFSX3UxN2l6dGc',
-    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCY2J6NmozVEdMR2s',
-    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCZlpiTzQ4R2M3T1E',
-    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCam5MbXhTb1JQODg',
-    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCd1dmSGhGazYtVkU',
-    'homology/homology',
-    'homology/homology_alignment',
-    'public/published_gastric_cancer_ags',
-    'public/published_gastric_cancer_gastric_control',
-    'public/published_gastric_cancer_gastric_sera',
-    'public/published_gastric_cancer_kato_iii',
-    'public/published_gastric_cancer_mkn45',
-    'public/published_ha_ca_t_sc_phosphoproteome_phosphoproteome',
-    'public/published_mda231_o_man_mda231mb',
-    'public/published_simple_cell_embo_colo205',
-    'public/published_simple_cell_embo_hacat',
-    'public/published_simple_cell_embo_hek293',
-    'public/published_simple_cell_embo_hela',
-    'public/published_simple_cell_embo_hepg2',
-    'public/published_simple_cell_embo_imr32',
-    'public/published_simple_cell_embo_k562',
-    'public/published_simple_cell_embo_mcf7',
-    'public/published_simple_cell_embo_mda231mb',
-    'public/published_simple_cell_embo_ovcar3',
-    'public/published_simple_cell_embo_t3m4',
-    'public/published_simple_cell_embo_t47d'
-];
 
 
 const expand_set = function(group_set) {
@@ -552,6 +521,8 @@ exports.datahandler = function datahandler(event,context) {
       console.error(err.stack);
     })
     .then( () => console.timeEnd('access_check'))
+    .then( () => datasetnames )
+    .then( () => console.log('We have',all_sets.length,'datasets'))
     .then( () =>  grants_promise )
     .then(function(grant_token) {
       context.succeed(generatePolicyDocument(grant_token.access, 'Allow', event.methodArn,grant_token.access));
