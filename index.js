@@ -338,6 +338,15 @@ exports.exchangetoken = function exchangetoken(event,context) {
       console.log('Renewing token');
       return copy_token(event.Authorization);
     }
+  }).then(token => {
+    // We wish to restrict the size of this token
+    Object.keys(token.access).forEach(set => {
+      if (token.access[set].length > 10) {
+        console.log('Too many proteins in grant for',set);
+        token.access[set] = [];
+      }
+    });
+    return token;
   }).then(get_signed_token);
 
   result.then(function(token) {
@@ -513,15 +522,20 @@ exports.datahandler = function datahandler(event,context) {
     // and the group ids for each of them
     // so that we can populate the grants
 
+    let grants_promise = get_grant_token(jwt.decode(token[1]).sub);
+
     Promise.all([
       accept_token(token[1]),
       check_data_access(token[1],resource[0],resource[1].toLowerCase())
-    ]).then(function(results) {
-      context.succeed(generatePolicyDocument(results[1], 'Allow', event.methodArn,results[1]));
+    ]).catch(function(err) {
+      console.error(err);
+      console.error(err.stack);
+    }).then( () =>  grants_promise ).then(function(grant_token) {
+      context.succeed(generatePolicyDocument(grant_token.access, 'Allow', event.methodArn,grant_token.access));
     }).catch(function(err) {
       console.error(err);
       console.error(err.stack);
-      context.succeed(generatePolicyDocument(err.grants, 'Allow', event.methodArn,err.grants));
+      context.fail('Error generating policy document');
     });
   } else {
     // Require a 'Bearer' token
