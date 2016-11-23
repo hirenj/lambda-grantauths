@@ -236,6 +236,7 @@ var copy_token = function(authorization) {
 
   let token_content = {
     'access' : current_token.payload.access,
+    'grantnames' : current_token.payload.grantnames,
     'iss' : 'glycodomain',
     'exp' : earliest_expiry,
     'sub' : current_token.payload.sub,
