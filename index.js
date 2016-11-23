@@ -65,6 +65,57 @@ var valid_microsoft_tennant = function(tennant_id) {
   });
 };
 
+const all_sets = [
+    'public/glycodomain_10029',
+    'public/glycodomain_10090',
+    'public/glycodomain_10116',
+    'public/glycodomain_559292',
+    'public/glycodomain_6239',
+    'public/glycodomain_7227',
+    'public/glycodomain_9606',
+    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCQWdzbVhQckZJc1k',
+    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCQnR5V0NMMkNPZ2s',
+    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCRXhiRFROX2paMU0',
+    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCTGFSX3UxN2l6dGc',
+    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCY2J6NmozVEdMR2s',
+    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCZlpiTzQ4R2M3T1E',
+    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCam5MbXhTb1JQODg',
+    'googlegroup-test-glycodomain-dataset-users@googlegroups.com/google-0By48KKDu9leCd1dmSGhGazYtVkU',
+    'homology/homology',
+    'homology/homology_alignment',
+    'public/published_gastric_cancer_ags',
+    'public/published_gastric_cancer_gastric_control',
+    'public/published_gastric_cancer_gastric_sera',
+    'public/published_gastric_cancer_kato_iii',
+    'public/published_gastric_cancer_mkn45',
+    'public/published_ha_ca_t_sc_phosphoproteome_phosphoproteome',
+    'public/published_mda231_o_man_mda231mb',
+    'public/published_simple_cell_embo_colo205',
+    'public/published_simple_cell_embo_hacat',
+    'public/published_simple_cell_embo_hek293',
+    'public/published_simple_cell_embo_hela',
+    'public/published_simple_cell_embo_hepg2',
+    'public/published_simple_cell_embo_imr32',
+    'public/published_simple_cell_embo_k562',
+    'public/published_simple_cell_embo_mcf7',
+    'public/published_simple_cell_embo_mda231mb',
+    'public/published_simple_cell_embo_ovcar3',
+    'public/published_simple_cell_embo_t3m4',
+    'public/published_simple_cell_embo_t47d'
+];
+
+
+const expand_set = function(group_set) {
+  let set_parts = group_set.split('/');
+  let group = set_parts[0];
+  let set = set_parts[1];
+  if (set_parts[1] !== '*') {
+    return [group+':'+set];
+  }
+  return all_sets.filter( (group_set) => group_set.indexOf(group) === 0 )
+                 .map( (group_set) => group + ':' + group_set.split('/')[1] );
+};
+
 const expand_resource = function(methodarn,grants) {
   let method_base = methodarn.split('/').slice(0,2).join('/');
   let all_resources = [
@@ -74,12 +125,14 @@ const expand_resource = function(methodarn,grants) {
     method_base + '/GET/metadata',
     method_base + '/GET/doi/*'
   ];
-  Object.keys(grants).forEach( (set) => {
-    if (grants[set].length == 1 && grants[set][0] == '*') {
-      all_resources.push(method_base + '/GET/data/latest/'+set+'/*');      
-    } else {
-      grants[set].forEach( (uniprot) => all_resources.push(method_base + '/GET/data/latest/'+set+'/'+uniprot.toLowerCase()) );
-    }
+  Object.keys(grants).forEach( (group_set) => {
+    expand_set(group_set).forEach((set) => {
+      if (grants[group_set].length == 1 && grants[group_set][0] == '*') {
+        all_resources.push(method_base + '/GET/data/latest/'+set+'/*');
+      } else {
+        grants[group_set].forEach( (uniprot) => all_resources.push(method_base + '/GET/data/latest/'+set+'/'+uniprot.toLowerCase()) );
+      }
+    });
   });
   return all_resources;
 };
@@ -448,7 +501,7 @@ exports.datahandler = function datahandler(event,context) {
   if (target.match('/GET/doi/') || target.match('/GET/metadata')) {
     target = '/data/latest/combined/publications';
   }
-  let resource = target.split('/data/latest/')[1].split('/');
+  let resource = (target.split('/data/latest/')[1] || 'test/test').split('/');
   console.log('Checking access for',resource);
   if(token[0] === 'Bearer'){
 
