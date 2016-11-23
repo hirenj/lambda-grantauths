@@ -74,7 +74,7 @@
     "LambdaDatahandlerRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [],
+        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"} ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -175,7 +175,8 @@
               "Sid": "ReadGrants",
               "Effect": "Allow",
               "Action": [
-                  "dynamodb:Scan"
+                  "dynamodb:Scan",
+                  "dynamodb:BatchGetItem"
               ],
               "Resource": { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":", { "Ref" : "AWS::AccountId" } ,":table/", { "Ref" : "grants" } ] ]}
             }

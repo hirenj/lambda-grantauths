@@ -31,6 +31,9 @@ if (config.region) {
   require('lambda-helpers').AWS.setRegion(config.region);
 }
 
+let dynamo = new AWS.DynamoDB();
+
+
 var get_certificates = Promise.resolve({'keys' : []});
 
 let read_file = function(filename) {
@@ -241,23 +244,35 @@ var copy_token = function(authorization) {
   return token_content;
 };
 
-var get_grant_token = function(user_id) {
-  user_id = user_id.toLowerCase();
+var get_grant_token = function(user_id,grantnames) {
+  if (user_id) {
+    user_id = user_id.toLowerCase();
+  }
   let params = {
     TableName : grants_table,
-    ProjectionExpression : 'datasets,proteins,valid_from,valid_to',
+    ProjectionExpression : '#nm,datasets,proteins,valid_from,valid_to',
     FilterExpression: 'contains(#usr,:userid) OR contains(#usr,:anon)',
     ExpressionAttributeNames:{
-        '#usr': 'users'
+        '#usr': 'users',
+        '#nm': 'Name'
     },
     ExpressionAttributeValues: {
         ':userid': { 'S' : user_id },
         ':anon' : { 'S' : 'anonymous'}
     }
   };
-  let dynamo = new AWS.DynamoDB();
-
-  return dynamo.scan(params).promise().then(function(data) {
+  if ( ! user_id ) {
+    params = {};
+    params[grants_table] = {
+      'Keys' : grantnames.map( (grant) => { return { 'Name' : {'S' : grant[0] }, 'valid_to' : {'N' : grant[1] } }; })
+    };
+    params = { 'RequestItems' : params };
+  }
+  let query_promise = (user_id ? dynamo.scan(params) : dynamo.batchGetItem(params) ).promise();
+  return query_promise.then(function(data) {
+    if ( ! data.Items && data.Responses ) {
+      data.Items = data.Responses[grants_table];
+    }
     let sets = [];
     let earliest_expiry = Math.floor((new Date()).getTime() / 1000);
 
@@ -271,13 +286,14 @@ var get_grant_token = function(user_id) {
       if (grant.valid_to.N < earliest_expiry ) {
         earliest_expiry = grant.valid_to.N;
       }
-      sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
+      sets.push({'protein' : grant.proteins.S, 'name' : grant.Name.S, 'valid_to' : grant.valid_to.N, 'sets' : grant.datasets.S });
     });
 
     // TODO - remove long sets of proteins
     let summary_grant = summarise_sets(sets);
 
     let token_content = {
+      'grantnames' : sets.map( (set) => [ set.name, set.valid_to ]),
       'access' : summary_grant,
       'iss' : 'glycodomain',
       'exp' : earliest_expiry,
@@ -521,16 +537,22 @@ exports.datahandler = function datahandler(event,context) {
     // So we need to get the full set of datasets
     // and the group ids for each of them
     // so that we can populate the grants
-
-    let grants_promise = get_grant_token(jwt.decode(token[1]).sub);
-
+    console.time('grant_token');
+    let grants_promise = get_grant_token(null,jwt.decode(token[1]).grantnames).then( (tok) => {
+      console.timeEnd('grant_token');
+      return tok;
+    });
+    console.time('access_check');
     Promise.all([
       accept_token(token[1]),
       check_data_access(token[1],resource[0],resource[1].toLowerCase())
     ]).catch(function(err) {
       console.error(err);
       console.error(err.stack);
-    }).then( () =>  grants_promise ).then(function(grant_token) {
+    })
+    .then( () => console.timeEnd('access_check'))
+    .then( () =>  grants_promise )
+    .then(function(grant_token) {
       context.succeed(generatePolicyDocument(grant_token.access, 'Allow', event.methodArn,grant_token.access));
     }).catch(function(err) {
       console.error(err);
