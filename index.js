@@ -127,7 +127,7 @@ var summarise_sets = function(grants) {
       datasets[set] = [ 'proteins_'+protein_lists[set_summarised].idx ];
     }
   });
-  datasets.proteins = Object.keys(protein_lists).sort( (a,b) => a.idx - b.idx ).map( (list) list.ids );
+  datasets.proteins = Object.keys(protein_lists).sort( (a,b) => a.idx - b.idx ).map( (list) => list.ids );
   return datasets;
 };
 
