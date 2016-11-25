@@ -74,7 +74,7 @@
     "LambdaDatahandlerRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"},{"Ref" : "ReadDatasets"} ],
+        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"} ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [

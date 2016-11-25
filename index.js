@@ -33,15 +33,6 @@ if (config.region) {
 
 let dynamo = new AWS.DynamoDB();
 
-const all_sets = [];
-
-let datasetnames = dynamo.getItem({'TableName' : config.tables.data, 'Key' : { 'acc' : {'S' : 'metadata' }, 'dataset' : {'S': 'datasets' } }}).promise().then( (data) => {
-  console.log('Populating data sets');
-  all_sets.length = 0;
-  data.Item.sets.L.map( set => set.S ).forEach( set => all_sets.push(set));
-  console.log('We have ',all_sets.length, 'sets in total');
-});
-
 var get_certificates = Promise.resolve({'keys' : []});
 
 let read_file = function(filename) {
@@ -76,18 +67,6 @@ var valid_microsoft_tennant = function(tennant_id) {
   });
 };
 
-
-const expand_set = function(group_set) {
-  let set_parts = group_set.split('/');
-  let group = set_parts[0];
-  let set = set_parts[1];
-  if (set_parts[1] !== '*') {
-    return [group+':'+set];
-  }
-  return all_sets.filter( (group_set) => group_set.indexOf(group) === 0 )
-                 .map( (group_set) => group + ':' + group_set.split('/')[1] );
-};
-
 const expand_resource = function(methodarn,grants) {
   let method_base = methodarn.split('/').slice(0,2).join('/');
   let all_resources = [
@@ -97,15 +76,6 @@ const expand_resource = function(methodarn,grants) {
     method_base + '/GET/metadata',
     method_base + '/GET/doi/*'
   ];
-  Object.keys(grants).forEach( (group_set) => {
-    expand_set(group_set).forEach((set) => {
-      if (grants[group_set].length == 1 && grants[group_set][0] == '*') {
-        all_resources.push(method_base + '/GET/data/latest/'+set+'/*');
-      } else {
-        grants[group_set].forEach( (uniprot) => all_resources.push(method_base + '/GET/data/latest/'+set+'/'+uniprot.toLowerCase()) );
-      }
-    });
-  });
   return all_resources;
 };
 
@@ -128,6 +98,7 @@ function generatePolicyDocument(principalId, effect,methodarn,resource) {
 
 var summarise_sets = function(grants) {
   let datasets = {};
+  let protein_lists = {};
   grants.forEach(function(grant) {
     (grant.sets || '').split(',').forEach(function(set) {
       if (! datasets[set]) {
@@ -145,6 +116,18 @@ var summarise_sets = function(grants) {
       }
     });
   });
+  let list_idx = 1;
+  Object.keys(datasets).forEach((set) => {
+    if (datasets[set].length > 0 && datasets[set][0] !== '*') {
+      let ids = datasets[set].sort();
+      let set_summarised = ids.join(',');
+      if (! protein_lists[set_summarised]) {
+        protein_lists[set_summarised] = { 'idx' : list_idx++, 'ids' : ids };
+      }
+      datasets[set] = [ 'proteins_'+protein_lists[set_summarised].idx ];
+    }
+  });
+  datasets.proteins = Object.keys(protein_lists).sort( (a,b) => a.idx - b.idx ).map( (list) list.ids );
   return datasets;
 };
 
@@ -259,7 +242,6 @@ var get_grant_token = function(user_id,grantnames) {
       sets.push({'protein' : grant.proteins.S, 'name' : grant.Name.S, 'valid_to' : grant.valid_to.N, 'sets' : grant.datasets.S });
     });
 
-    // TODO - remove long sets of proteins
     let summary_grant = summarise_sets(sets);
 
     let token_content = {
@@ -325,13 +307,7 @@ exports.exchangetoken = function exchangetoken(event,context) {
       return copy_token(event.Authorization);
     }
   }).then(token => {
-    // We wish to restrict the size of this token
-    Object.keys(token.access).forEach(set => {
-      if (token.access[set].length > 10) {
-        console.log('Too many proteins in grant for',set);
-        token.access[set] = [];
-      }
-    });
+    token.access.proteins = token.access.proteins.filter( (list) => list.length <= 10 );
     return token;
   }).then(get_signed_token);
 
@@ -437,53 +413,6 @@ var accept_token = function(token) {
   return validation_promise;
 };
 
-var check_data_access = function(token,dataset,protein_id) {
-  let grants = jwt.decode(token).access;
-  let valid = false;
-  let dataset_parts = dataset.split(':');
-  let group = dataset_parts[0];
-  let set_id = dataset_parts[1];
-  if ( typeof set_id === 'undefined') {
-    set_id = group;
-    group = '*';
-  }
-  console.log('Grants for user ',grants);
-  console.log('Trying to get access to ',group,set_id);
-
-  if ((['combined','uniprot','homology'].indexOf(set_id) >= 0) && group === '*') {
-    valid = true;
-    console.log('Getting built-in dataset, not checking grants');
-  }
-
-  if (! valid ) {
-    Object.keys(grants).forEach(function(set) {
-      let grant_set_parts = set.split('/');
-      let valid_set = false;
-      if (grant_set_parts[0] === group && (grant_set_parts[1] === '*' || grant_set_parts[1] === set_id )) {
-        valid_set = true;
-      }
-      if (valid_set) {
-        grants[set].forEach(function(grant_protein_id) {
-          if (grant_protein_id == '*') {
-            valid = true;
-          }
-        });
-        console.log('Valid grants for',set,grants[set].join(','));
-        valid = valid || grants[set].filter(function(prot) { return prot.toLowerCase() === protein_id; }).length > 0;
-      }
-    });
-  }
-
-  if (valid) {
-    // We can also push through the valid datasets here
-    // and shove it into the principalId field that can
-    // then be decoded in the target function
-    return Promise.resolve(grants);
-  }
-  let err = new Error('No access');
-  err.grants = grants;
-  return Promise.reject(err);
-};
 
 /**
  * Check authorisation for requests asking for data
@@ -493,11 +422,6 @@ exports.datahandler = function datahandler(event,context) {
   let token = event.authorizationToken.split(' ');
   let target = event.methodArn.split(':').slice(5).join(':');
   console.log('Desired target is ',target);
-  if (target.match('/GET/doi/') || target.match('/GET/metadata')) {
-    target = '/data/latest/combined/publications';
-  }
-  let resource = (target.split('/data/latest/')[1] || 'test/test').split('/');
-  console.log('Checking access for',resource);
   if(token[0] === 'Bearer'){
 
     // We should instead be generating a single complete
@@ -513,16 +437,9 @@ exports.datahandler = function datahandler(event,context) {
       return tok;
     });
     console.time('access_check');
-    Promise.all([
-      accept_token(token[1]),
-      check_data_access(token[1],resource[0],resource[1].toLowerCase())
-    ]).catch(function(err) {
-      console.error(err);
-      console.error(err.stack);
-    })
+    accept_token(token[1])
+    .catch(function(err) { console.error(err); console.error(err.stack); })
     .then( () => console.timeEnd('access_check'))
-    .then( () => datasetnames )
-    .then( () => console.log('We have',all_sets.length,'datasets'))
     .then( () =>  grants_promise )
     .then(function(grant_token) {
       context.succeed(generatePolicyDocument(grant_token.access, 'Allow', event.methodArn,grant_token.access));
