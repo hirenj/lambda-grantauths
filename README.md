@@ -13,5 +13,5 @@ email = token.preferred_username
 ```
 
 ```
-IDS='q7z601 q7z602 q7z7m1 q86sm5 q86sm8 q86sp6 q86sq3 q86sq4 q86sq6';STAGE='test';TOKEN=$(curl --silent "https://$STAGE.glycocode.com/api/login" | tr -d '"'); for id in $IDS; do for i in `seq 1 10`; do curl --silent "https://$STAGE.glycocode.com/api/data/latest/combined/$id?" -o /dev/null -w %{time_connect}:%{time_starttransfer}:%{time_total} -H "authorization: Bearer $TOKEN" -H 'cache-control: no-cache' --compressed; echo " $STAGE $id $i"; sleep 0.5; done; done
+IDS='q7z601 q7z602 q7z7m1 q86sm5 q86sm8 q86sp6 q86sq3 q86sq4 q86sq6';STAGE='test';DATE=$(date +%s);TOKEN=$(curl --silent "https://$STAGE.glycocode.com/api/login?cachebuster=$DATE" | tr -d '"'); for id in $IDS; do for i in `seq 1 10`; do curl --silent "https://$STAGE.glycocode.com/api/data/latest/combined/$id?" -o /dev/null -w %{time_connect}:%{time_starttransfer}:%{time_total} -H "authorization: Bearer $TOKEN" -H 'cache-control: no-cache' --compressed; echo " $STAGE $id $i"; sleep 0.5; done; done
 ```
