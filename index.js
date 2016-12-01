@@ -161,6 +161,9 @@ var get_userid_from_token = function(authorization) {
   if (current_token.payload.iss === 'accounts.google.com') {
     user_id = current_token.payload.email;
   }
+  if (current_token.payload.iss === 'https://hirenj.auth0.com/') {
+    user_id = current_token.payload.email;
+  }
   if (current_token.payload.iss.match(/^https:\/\/login\.microsoftonline\.com\//)) {
     let valid_tennants = valid_microsoft_tennant(current_token.payload.tid);
     if (valid_tennants.length < 1) {
@@ -306,6 +309,8 @@ exports.exchangetoken = function exchangetoken(event,context) {
       console.log('Renewing token');
       return copy_token(event.Authorization);
     }
+    console.log(err);
+    throw err;
   }).then(token => {
     token.access.proteins = token.access.proteins.filter( (list) => list.length <= 10 );
     return token;
@@ -359,6 +364,10 @@ var accept_openid_connect_token = function(token) {
     return jwt_verify(token, jwkToPem(certs.keys.filter(function(cert) { return cert.kid == cert_id; })[0]) );
   }).then(function(data){
     if (data && data.iss && data.iss == 'accounts.google.com'){
+      console.log('LOGIN', data);
+      // Restrict the functions to only the token exchange user
+      return data;
+    } else if (data && data.iss && data.iss == 'https://hirenj.auth0.com/') {
       console.log('LOGIN', data);
       // Restrict the functions to only the token exchange user
       return data;
