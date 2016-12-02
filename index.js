@@ -31,6 +31,8 @@ if (config.region) {
   require('lambda-helpers').AWS.setRegion(config.region);
 }
 
+let dynamo = new AWS.DynamoDB();
+
 var get_certificates = Promise.resolve({'keys' : []});
 
 let read_file = function(filename) {
@@ -65,17 +67,29 @@ var valid_microsoft_tennant = function(tennant_id) {
   });
 };
 
-function generatePolicyDocument(principalId, effect, resource) {
+const expand_resource = function(methodarn,grants) {
+  let method_base = methodarn.split('/').slice(0,2).join('/');
+  let all_resources = [
+    method_base + '/GET/data/latest/combined/*',
+    method_base + '/GET/data/latest/homology/*',
+    method_base + '/GET/data/latest/uniprot/*',
+    method_base + '/GET/metadata',
+    method_base + '/GET/doi/*'
+  ];
+  return all_resources;
+};
+
+function generatePolicyDocument(principalId, effect,methodarn,resource) {
   let authResponse = {};
-  authResponse.principalId = principalId;
-  if (effect && resource) {
+  authResponse.principalId = typeof principalId === 'string' ? principalId : JSON.stringify(principalId);
+  if (effect && methodarn) {
     var policyDocument = {};
     policyDocument.Version = '2012-10-17'; // default version
     policyDocument.Statement = [];
     var statementOne = {};
     statementOne.Action = 'execute-api:Invoke'; // default action
     statementOne.Effect = effect;
-    statementOne.Resource = resource;
+    statementOne.Resource = resource ? expand_resource(methodarn,resource) : methodarn;
     policyDocument.Statement[0] = statementOne;
     authResponse.policyDocument = policyDocument;
   }
@@ -84,6 +98,7 @@ function generatePolicyDocument(principalId, effect, resource) {
 
 var summarise_sets = function(grants) {
   let datasets = {};
+  let protein_lists = {};
   grants.forEach(function(grant) {
     (grant.sets || '').split(',').forEach(function(set) {
       if (! datasets[set]) {
@@ -101,6 +116,18 @@ var summarise_sets = function(grants) {
       }
     });
   });
+  let list_idx = 1;
+  Object.keys(datasets).forEach((set) => {
+    if (datasets[set].length > 0 && datasets[set][0] !== '*') {
+      let ids = datasets[set].sort();
+      let set_summarised = ids.join(',');
+      if (! protein_lists[set_summarised]) {
+        protein_lists[set_summarised] = { 'idx' : list_idx++, 'ids' : ids };
+      }
+      datasets[set] = [ 'proteins_'+protein_lists[set_summarised].idx ];
+    }
+  });
+  datasets.proteins = Object.keys(protein_lists).sort( (a,b) => a.idx - b.idx ).map( (list) => list.ids );
   return datasets;
 };
 
@@ -134,6 +161,9 @@ var get_userid_from_token = function(authorization) {
   if (current_token.payload.iss === 'accounts.google.com') {
     user_id = current_token.payload.email;
   }
+  if (current_token.payload.iss === 'https://hirenj.auth0.com/') {
+    user_id = current_token.payload.email;
+  }
   if (current_token.payload.iss.match(/^https:\/\/login\.microsoftonline\.com\//)) {
     let valid_tennants = valid_microsoft_tennant(current_token.payload.tid);
     if (valid_tennants.length < 1) {
@@ -161,6 +191,7 @@ var copy_token = function(authorization) {
 
   let token_content = {
     'access' : current_token.payload.access,
+    'grantnames' : current_token.payload.grantnames,
     'iss' : 'glycodomain',
     'exp' : earliest_expiry,
     'sub' : current_token.payload.sub,
@@ -169,23 +200,35 @@ var copy_token = function(authorization) {
   return token_content;
 };
 
-var get_grant_token = function(user_id) {
-  user_id = user_id.toLowerCase();
+var get_grant_token = function(user_id,grantnames) {
+  if (user_id) {
+    user_id = user_id.toLowerCase();
+  }
   let params = {
     TableName : grants_table,
-    ProjectionExpression : 'datasets,proteins,valid_from,valid_to',
+    ProjectionExpression : '#nm,datasets,proteins,valid_from,valid_to',
     FilterExpression: 'contains(#usr,:userid) OR contains(#usr,:anon)',
     ExpressionAttributeNames:{
-        '#usr': 'users'
+        '#usr': 'users',
+        '#nm': 'Name'
     },
     ExpressionAttributeValues: {
         ':userid': { 'S' : user_id },
         ':anon' : { 'S' : 'anonymous'}
     }
   };
-  let dynamo = new AWS.DynamoDB();
-
-  return dynamo.scan(params).promise().then(function(data) {
+  if ( ! user_id ) {
+    params = {};
+    params[grants_table] = {
+      'Keys' : grantnames.map( (grant) => { return { 'Name' : {'S' : grant[0] }, 'valid_to' : {'N' : grant[1] } }; })
+    };
+    params = { 'RequestItems' : params };
+  }
+  let query_promise = (user_id ? dynamo.scan(params) : dynamo.batchGetItem(params) ).promise();
+  return query_promise.then(function(data) {
+    if ( ! data.Items && data.Responses ) {
+      data.Items = data.Responses[grants_table];
+    }
     let sets = [];
     let earliest_expiry = Math.floor((new Date()).getTime() / 1000);
 
@@ -199,11 +242,13 @@ var get_grant_token = function(user_id) {
       if (grant.valid_to.N < earliest_expiry ) {
         earliest_expiry = grant.valid_to.N;
       }
-      sets.push({'protein' : grant.proteins.S, 'sets' : grant.datasets.S });
+      sets.push({'protein' : grant.proteins.S, 'name' : grant.Name.S, 'valid_to' : grant.valid_to.N, 'sets' : grant.datasets.S });
     });
+
     let summary_grant = summarise_sets(sets);
 
     let token_content = {
+      'grantnames' : sets.map( (set) => [ set.name, set.valid_to ]),
       'access' : summary_grant,
       'iss' : 'glycodomain',
       'exp' : earliest_expiry,
@@ -264,6 +309,11 @@ exports.exchangetoken = function exchangetoken(event,context) {
       console.log('Renewing token');
       return copy_token(event.Authorization);
     }
+    console.log(err);
+    throw err;
+  }).then(token => {
+    token.access.proteins = token.access.proteins.filter( (list) => list.length <= 10 );
+    return token;
   }).then(get_signed_token);
 
   result.then(function(token) {
@@ -314,6 +364,10 @@ var accept_openid_connect_token = function(token) {
     return jwt_verify(token, jwkToPem(certs.keys.filter(function(cert) { return cert.kid == cert_id; })[0]) );
   }).then(function(data){
     if (data && data.iss && data.iss == 'accounts.google.com'){
+      console.log('LOGIN', data);
+      // Restrict the functions to only the token exchange user
+      return data;
+    } else if (data && data.iss && data.iss == 'https://hirenj.auth0.com/') {
       console.log('LOGIN', data);
       // Restrict the functions to only the token exchange user
       return data;
@@ -368,51 +422,6 @@ var accept_token = function(token) {
   return validation_promise;
 };
 
-var check_data_access = function(token,dataset,protein_id) {
-  let grants = jwt.decode(token).access;
-  let valid = false;
-  let dataset_parts = dataset.split(':');
-  let group = dataset_parts[0];
-  let set_id = dataset_parts[1];
-  if ( typeof set_id === 'undefined') {
-    set_id = group;
-    group = '*';
-  }
-  console.log('Grants for user ',grants);
-  console.log('Trying to get access to ',group,set_id);
-
-  if ((['combined','uniprot','homology'].indexOf(set_id) >= 0) && group === '*') {
-    valid = true;
-    console.log('Getting built-in dataset, not checking grants');
-  }
-
-  if (! valid ) {
-    Object.keys(grants).forEach(function(set) {
-      let grant_set_parts = set.split('/');
-      let valid_set = false;
-      if (grant_set_parts[0] === group && (grant_set_parts[1] === '*' || grant_set_parts[1] === set_id )) {
-        valid_set = true;
-      }
-      if (valid_set) {
-        grants[set].forEach(function(grant_protein_id) {
-          if (grant_protein_id == '*') {
-            valid = true;
-          }
-        });
-        console.log('Valid grants for',set,grants[set].join(','));
-        valid = valid || grants[set].filter(function(prot) { return prot.toLowerCase() === protein_id; }).length > 0;
-      }
-    });
-  }
-
-  if (valid) {
-    // We can also push through the valid datasets here
-    // and shove it into the principalId field that can
-    // then be decoded in the target function
-    return Promise.resolve(JSON.stringify(grants));
-  }
-  return Promise.reject(new Error('No access'));
-};
 
 /**
  * Check authorisation for requests asking for data
@@ -422,21 +431,31 @@ exports.datahandler = function datahandler(event,context) {
   let token = event.authorizationToken.split(' ');
   let target = event.methodArn.split(':').slice(5).join(':');
   console.log('Desired target is ',target);
-  if (target.match('/GET/doi/') || target.match('/GET/metadata')) {
-    target = '/data/latest/combined/publications';
-  }
-  let resource = target.split('/data/latest/')[1].split('/');
-  console.log('Checking access for',resource);
   if(token[0] === 'Bearer'){
-    Promise.all([
-      accept_token(token[1]),
-      check_data_access(token[1],resource[0],resource[1].toLowerCase())
-    ]).then(function(results) {
-      context.succeed(generatePolicyDocument(results[1], 'Allow', event.methodArn));
+
+    // We should instead be generating a single complete
+    // policy document that can be reused all over the
+    // place, and then caching that.
+
+    // So we need to get the full set of datasets
+    // and the group ids for each of them
+    // so that we can populate the grants
+    console.time('grant_token');
+    let grants_promise = get_grant_token(null,jwt.decode(token[1]).grantnames).then( (tok) => {
+      console.timeEnd('grant_token');
+      return tok;
+    });
+    console.time('access_check');
+    accept_token(token[1])
+    .catch(function(err) { console.error(err); console.error(err.stack); })
+    .then( () => console.timeEnd('access_check'))
+    .then( () =>  grants_promise )
+    .then(function(grant_token) {
+      context.succeed(generatePolicyDocument(grant_token.access, 'Allow', event.methodArn,grant_token.access));
     }).catch(function(err) {
       console.error(err);
       console.error(err.stack);
-      context.succeed(generatePolicyDocument('user', 'Deny', event.methodArn));
+      context.fail('Error generating policy document');
     });
   } else {
     // Require a 'Bearer' token
