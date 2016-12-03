@@ -67,7 +67,7 @@ var valid_microsoft_tennant = function(tennant_id) {
   });
 };
 
-const expand_resource = function(methodarn,grants) {
+const expand_resource = function(methodarn) {
   let method_base = methodarn.split('/').slice(0,2).join('/');
   let all_resources = [
     method_base + '/GET/data/latest/combined/*',
