@@ -474,7 +474,8 @@ exports.loginhandler = function loginhandler(event, context){
     accept_token(token[1]).then(function(token) {
       context.succeed(generatePolicyDocument(token.sub, 'Allow', event.methodArn));
     }).catch(function(err) {
-      context.fail(err.message);
+      console.log(err);
+      context.fail('Unauthorized');
     });
   } else {
     // Require a 'Bearer' token
