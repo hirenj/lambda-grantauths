@@ -405,6 +405,9 @@ var accept_self_token = function(token,anonymous) {
 
 var accept_token = function(token) {
   let decoded_token = jwt.decode(token);
+  if ( ! decoded_token ) {
+    return Promise.reject(new Error('Unauthorized'));
+  }
   let validation_promise = null;
   if (decoded_token.iss === 'glycodomain' && decoded_token.sub !== 'anonymous') {
     // This is one of our own tokens
@@ -432,7 +435,6 @@ exports.datahandler = function datahandler(event,context) {
   let target = event.methodArn.split(':').slice(5).join(':');
   console.log('Desired target is ',target);
   if(token[0] === 'Bearer'){
-
     // We should instead be generating a single complete
     // policy document that can be reused all over the
     // place, and then caching that.
@@ -440,14 +442,41 @@ exports.datahandler = function datahandler(event,context) {
     // So we need to get the full set of datasets
     // and the group ids for each of them
     // so that we can populate the grants
+
+    let decode_token = new Promise(function(resolve,reject) {
+      let val = null;
+      try {
+        val = jwt.decode(token[1]);
+      } catch(e) {
+        reject(new Error('Unauthorized'));
+      }
+      if (val) {
+        resolve(val.grantnames);
+      } else {
+        reject(new Error('Unauthorized'));
+      }
+    });
+
     console.time('grant_token');
-    let grants_promise = get_grant_token(null,jwt.decode(token[1]).grantnames).then( (tok) => {
+    let grants_promise = decode_token.then(get_grant_token.bind(null,null)).then( (tok) => {
       console.timeEnd('grant_token');
       return tok;
     });
     console.time('access_check');
     accept_token(token[1])
-    .catch(function(err) { console.error(err); console.error(err.stack); })
+    .catch(function(err) {
+      if (err.message == 'invalid signature') {
+        throw new Error('Unauthorized');
+      }
+      if (err.message == 'Unauthorized') {
+        throw err;
+      }
+      if (err.message == 'Expired') {
+        throw new Error('Unauthorized');
+      }
+      console.error(err);
+      console.error(err.stack);
+    })
     .then( () => console.timeEnd('access_check'))
     .then( () =>  grants_promise )
     .then(function(grant_token) {
@@ -455,7 +484,7 @@ exports.datahandler = function datahandler(event,context) {
     }).catch(function(err) {
       console.error(err);
       console.error(err.stack);
-      context.fail('Error generating policy document');
+      context.fail('Unauthorized');
     });
   } else {
     // Require a 'Bearer' token
