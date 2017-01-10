@@ -39,7 +39,10 @@
     "grunt-env": "^0.4.4",
     "jshint": "^2.9.2",
     "load-grunt-tasks": "^3.4.0",
-    "precommit-hook": "^3.0.0"
+    "precommit-hook": "^3.0.0",
+    "aws-sdk": "^2.7.21",
+    "grunt-force-task": "^2.0.0",
+    "grunt-git-describe": "^2.4.2"
   },
   "pre-commit": [
     "lint"
