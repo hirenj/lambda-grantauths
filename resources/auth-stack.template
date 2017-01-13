@@ -7,7 +7,7 @@
         "TableName" : { "Fn::Join" :  [ "-", [ { "Ref" : "AWS::StackName" }, "grants" ] ] },
         "AttributeDefinitions": [
           {
-            "AttributeName": "Name",
+            "AttributeName": "id",
             "AttributeType": "S"
           },
           {
@@ -17,7 +17,7 @@
         ],
         "KeySchema": [
           {
-            "AttributeName": "Name",
+            "AttributeName": "id",
             "KeyType": "HASH"
           },
           {
@@ -202,16 +202,7 @@
                   "dynamodb:BatchWriteItem"
               ],
               "Resource": { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":", { "Ref" : "AWS::AccountId" } ,":table/", { "Ref" : "grants" } ] ]}
-            },
-            {
-              "Sid": "WriteGrantsConfig",
-              "Effect": "Allow",
-              "Action": [
-                  "s3:PutObject"
-              ],
-              "Resource": { "Fn::Join" :  [ "", [ "arn:aws:s3:", ":", ":", { "Ref" : "dataBucket" }, "/conf/groupids" ] ]}
             }
-
           ]
         }
       },

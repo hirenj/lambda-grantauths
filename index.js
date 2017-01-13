@@ -210,7 +210,7 @@ var get_grant_token = function(user_id,grantnames) {
     FilterExpression: 'contains(#usr,:userid) OR contains(#usr,:anon)',
     ExpressionAttributeNames:{
         '#usr': 'users',
-        '#nm': 'Name'
+        '#nm': 'id'
     },
     ExpressionAttributeValues: {
         ':userid': { 'S' : user_id },
@@ -220,7 +220,7 @@ var get_grant_token = function(user_id,grantnames) {
   if ( ! user_id ) {
     params = {};
     params[grants_table] = {
-      'Keys' : grantnames.map( (grant) => { return { 'Name' : {'S' : grant[0] }, 'valid_to' : {'N' : grant[1] } }; })
+      'Keys' : grantnames.map( (grant) => { return { 'id' : {'S' : grant[0] }, 'valid_to' : {'N' : grant[1] } }; })
     };
     params = { 'RequestItems' : params };
   }
@@ -242,7 +242,7 @@ var get_grant_token = function(user_id,grantnames) {
       if (grant.valid_to.N < earliest_expiry ) {
         earliest_expiry = grant.valid_to.N;
       }
-      sets.push({'protein' : grant.proteins.S, 'name' : grant.Name.S, 'valid_to' : grant.valid_to.N, 'sets' : grant.datasets.S });
+      sets.push({'protein' : grant.proteins.S, 'name' : grant.id.S, 'valid_to' : grant.valid_to.N, 'sets' : grant.datasets.S });
     });
 
     let summary_grant = summarise_sets(sets);
