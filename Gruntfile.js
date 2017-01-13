@@ -107,8 +107,10 @@ module.exports = function(grunt) {
     var lambda = new AWS.Lambda();
     lambda.getFunctionConfiguration({FunctionName: arn},function(err,data) {
       var git_status = grunt.option('gitRevision');
-      if (git_status.dirty) {
+      if (git_status.indexOf('dirty') >= 0) {
         grunt.log.writeln("Git repo is dirty, updating by default");
+      } else if (grunt.option('force_deploy')) {
+        grunt.log.writeln("Forcing deploy");
       } else {
         var current_version = data.Description;
         if (current_version === git_status.toString()) {
@@ -145,26 +147,27 @@ module.exports = function(grunt) {
 
   grunt.registerTask('versioncheck',['saveRevision']);
 
-	grunt.registerTask('rotateCertificates',function() {
-		var AWS = require('lambda-helpers').AWS;
-		AWS.setRegion(config.region);
-		var lambda = new AWS.Lambda();
-		var done = this.async();
-		var params = {
-			FunctionName: config.functions['rotateCertificates'],
-			InvocationType: 'RequestResponse',
-			LogType: 'Tail',
-			Payload: '{}'
-		};
-		lambda.invoke(params).promise().then(function(result) {
-			console.log(result.Payload);
-			console.log(new Buffer(result.LogResult,"base64").toString());
-		}).catch(function(err) {
-			console.log(err.stack,err);
-		}).then(function() {
-			done();
-		});
-	});
+  grunt.registerTask('rotateCertificates',function() {
+    var AWS = require('lambda-helpers').AWS;
+    AWS.setRegion(config.region);
+    var lambda = new AWS.Lambda();
+    var done = this.async();
+    var params = {
+            FunctionName: config.functions['rotateCertificates'],
+            InvocationType: 'RequestResponse',
+            LogType: 'Tail',
+            Payload: '{}'
+    };
+    lambda.invoke(params).promise().then(function(result) {
+            console.log(result.Payload);
+            console.log(new Buffer(result.LogResult,"base64").toString());
+    }).catch(function(err) {
+            console.log(err.stack,err);
+    }).then(function() {
+            done();
+    });
+  });
+
 
   grunt.registerTask('deploy', function(func) {
     var tasks = ['lambda_deploy','lambda_setversion'];
