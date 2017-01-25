@@ -369,7 +369,7 @@ var accept_openid_connect_token = function(token) {
       console.log('LOGIN', data);
       // Restrict the functions to only the token exchange user
       return data;
-    } else if (data && data.iss && data.iss == 'https://hirenj.auth0.com/') {
+    } else if (data && data.iss && data.iss == 'https://'+auth0_domain+'.auth0.com/') {
       console.log('LOGIN', data);
       // Restrict the functions to only the token exchange user
       return data;

@@ -148,6 +148,9 @@
         },
         "Description" : "datahandler",
         "Handler" : "index.datahandler",
+        "Environment" : { "Variables" : {
+          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"}
+        }},
         "Role" : {"Fn::GetAtt" : ["LambdaDatahandlerRole", "Arn"] },
         "Runtime" : "nodejs4.3",
         "MemorySize" : 128,
@@ -167,6 +170,9 @@
         },
         "Description" : "loginhandler",
         "Handler" : "index.loginhandler",
+        "Environment" : { "Variables" : {
+          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"}
+        }},
         "Role" : {"Fn::GetAtt" : ["LambdaLoginhandlerRole", "Arn"] },
         "Runtime" : "nodejs4.3",
         "MemorySize" : 128,
