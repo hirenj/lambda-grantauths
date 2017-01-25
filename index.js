@@ -31,6 +31,8 @@ if (config.region) {
   require('lambda-helpers').AWS.setRegion(config.region);
 }
 
+const auth0_domain = process.env.AUTH0_DOMAIN;
+
 let dynamo = new AWS.DynamoDB();
 
 var get_certificates = Promise.resolve({'keys' : []});
@@ -161,7 +163,7 @@ var get_userid_from_token = function(authorization) {
   if (current_token.payload.iss === 'accounts.google.com') {
     user_id = current_token.payload.email;
   }
-  if (current_token.payload.iss === 'https://hirenj.auth0.com/') {
+  if (current_token.payload.iss === 'https://'+auth0_domain+'.auth0.com/') {
     user_id = current_token.payload.email;
   }
   if (current_token.payload.iss.match(/^https:\/\/login\.microsoftonline\.com\//)) {

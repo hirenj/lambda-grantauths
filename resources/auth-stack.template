@@ -1,5 +1,12 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters" : {
+    "AUTH0DOMAIN" : {
+      "Type" : "String",
+      "Default" : "",
+      "Description" : "Auth0 domain for authentication (i.e. just 'example' from a domain of 'example.auth0.com')"
+    }
+  },
   "Resources": {
     "grants": {
       "Type": "AWS::DynamoDB::Table",
@@ -119,6 +126,9 @@
         },
         "Description" : "exchangetoken",
         "Handler" : "index.exchangetoken",
+        "Environment" : { "Variables" : {
+          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"}
+        }},
         "Role" : {"Fn::GetAtt" : ["LambdaExchangetokenRole", "Arn"] },
         "Runtime" : "nodejs4.3",
         "MemorySize" : 128,
