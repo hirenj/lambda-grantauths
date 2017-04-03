@@ -519,10 +519,10 @@ exports.loginhandler = function loginhandler(event, context){
 exports.rdatasethandler = function(event,context) {
   let token = event.authorizationToken;
   let payload = jwt.decode(token,{complete: true});
-  let get_userid = Promise.resolve(payload.email || 'anonymous');//get_userid_from_token('Bearer '+token);
+  let get_userid = Promise.resolve(payload.email || 'anonymous');
   Promise.all([get_userid,accept_token(token)]).then( promise_results => {
     let user_id = promise_results[0];
-    return rdatasets.generatePolicyDocument(get_grant_token(user_id),token,event.methodArn);
+    return rdatasets.generatePolicyDocument(get_grant_token(user_id),event.methodArn);
   })
   .then( document => context.succeed(document) )
   .catch( (err) => {

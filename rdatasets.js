@@ -37,18 +37,18 @@ let get_valid_sets = function(grants,sets) {
   return valid_sets;
 };
 
-const expand_resource = function expand_resource(methodarn,resources,token) {
+const expand_resource = function expand_resource(methodarn,resources) {
   let method_base = methodarn.split('/').slice(0,2).join('/');
   let all_resources = [
-    method_base + `/GET/rpackages/${token}/src/contrib/PACKAGES`
+    method_base + `/GET/rpackages/src/contrib/PACKAGES`
   ];
   all_resources = all_resources.concat( resources.map( resource => {
-    return method_base + `/GET/rpackages/${token}/src/contrib/` + resource + '.tar.gz';
+    return method_base + `/GET/rpackages/src/contrib/` + resource + '.tar.gz';
   }) );
   return all_resources;
 };
 
-const generatePolicyDocument = function generatePolicyDocument(principalId, effect,methodarn,resources,token) {
+const generatePolicyDocument = function generatePolicyDocument(principalId, effect,methodarn,resources) {
   let authResponse = {};
   authResponse.principalId = typeof principalId === 'string' ? principalId : JSON.stringify(principalId);
   var policyDocument = {};
@@ -57,13 +57,13 @@ const generatePolicyDocument = function generatePolicyDocument(principalId, effe
   var statementOne = {};
   statementOne.Action = 'execute-api:Invoke'; // default action
   statementOne.Effect = effect;
-  statementOne.Resource = expand_resource(methodarn,resources,token);
+  statementOne.Resource = expand_resource(methodarn,resources);
   policyDocument.Statement[0] = statementOne;
   authResponse.policyDocument = policyDocument;
   return authResponse;
 }
 
-exports.generatePolicyDocument = function(grants_promise,token,methodarn) {
+exports.generatePolicyDocument = function(grants_promise,methodarn) {
   let dynamo = new AWS.DynamoDB.DocumentClient();
   let datasetnames = dynamo.get({'TableName' : data_table, 'Key' : { 'acc' : 'metadata', 'dataset' : 'datasets' }}).promise().then( (data) => {
     console.log('Populating data sets');
@@ -75,6 +75,6 @@ exports.generatePolicyDocument = function(grants_promise,token,methodarn) {
   return Promise.all([grants_promise,datasetnames]).then( (results) => {
     console.log(results[0],results[1]);
     let valid_sets = get_valid_sets(results[0].access,results[1]);
-    return generatePolicyDocument(results[0],'allow',methodarn,valid_sets,token);
+    return generatePolicyDocument(results[0],'allow',methodarn,valid_sets);
   });
 };
