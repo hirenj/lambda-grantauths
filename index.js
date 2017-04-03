@@ -11,6 +11,7 @@ var jwt = require('jsonwebtoken');
 var jwkToPem = require('jwk-to-pem');
 var fs = require('fs');
 var AWS = require('lambda-helpers').AWS;
+const rdatasets = require('./rdatasets');
 
 var grants_table = '';
 var pubkeys_table = '';
@@ -515,3 +516,18 @@ exports.loginhandler = function loginhandler(event, context){
   }
 };
 
+exports.rdatasethandler = function(event,context) {
+  let token = event.authorizationToken;
+  let payload = jwt.decode(token,{complete: true});
+  let get_userid = Promise.resolve(payload.email || 'anonymous');//get_userid_from_token('Bearer '+token);
+  Promise.all([get_userid,accept_token(token)]).then( promise_results => {
+    let user_id = promise_results[0];
+    return rdatasets.generatePolicyDocument(get_grant_token(user_id),token,event.methodArn);
+  })
+  .then( document => context.succeed(document) )
+  .catch( (err) => {
+    console.log(err);
+    console.log(err.stack);
+    context.fail('Unauthorized');
+  });
+};
