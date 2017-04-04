@@ -40,7 +40,8 @@ let get_valid_sets = function(grants,sets) {
 const expand_resource = function expand_resource(methodarn,resources) {
   let method_base = methodarn.split('/').slice(0,2).join('/');
   let all_resources = [
-    method_base + `/POST/repository/src/contrib/PACKAGES`
+    method_base + `/POST/repository/src/contrib/PACKAGES`,
+    method_base + `/POST/repository/src/contrib/PACKAGES.gz`
   ];
   all_resources = all_resources.concat( resources.map( resource => {
     return method_base + `/POST/repository/src/contrib/` + resource + '.tar.gz';
