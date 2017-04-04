@@ -40,10 +40,10 @@ let get_valid_sets = function(grants,sets) {
 const expand_resource = function expand_resource(methodarn,resources) {
   let method_base = methodarn.split('/').slice(0,2).join('/');
   let all_resources = [
-    method_base + `/GET/rpackages/src/contrib/PACKAGES`
+    method_base + `/POST/repository/src/contrib/PACKAGES`
   ];
   all_resources = all_resources.concat( resources.map( resource => {
-    return method_base + `/GET/rpackages/src/contrib/` + resource + '.tar.gz';
+    return method_base + `/POST/repository/src/contrib/` + resource + '.tar.gz';
   }) );
   return all_resources;
 };
@@ -75,6 +75,6 @@ exports.generatePolicyDocument = function(grants_promise,methodarn) {
   return Promise.all([grants_promise,datasetnames]).then( (results) => {
     console.log(results[0],results[1]);
     let valid_sets = get_valid_sets(results[0].access,results[1]);
-    return generatePolicyDocument(results[0],'allow',methodarn,valid_sets);
+    return generatePolicyDocument(results[0].access,'allow',methodarn,valid_sets);
   });
 };
