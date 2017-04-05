@@ -63,7 +63,7 @@
     "LambdaExchangetokenRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"} ],
+        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"}, {"Ref" : "WriteSession"} ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -117,7 +117,7 @@
     "LambdaRdatasethandlerRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"}, {"Ref" : "ReadDatasets"} ],
+        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"}, {"Ref" : "ReadDatasets"}, {"Ref" : "ReadSession"} ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -240,6 +240,48 @@
         }
       },
       "DependsOn": "grants"
+    },
+    "WriteSession" : {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties" : {
+        "Description" : "WriteSession",
+        "PolicyDocument" : {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "WriteSession",
+              "Effect": "Allow",
+              "Action": [
+                  "s3:PutObject"
+              ],
+              "Resource": [
+                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-gator/sessions/*" ] ] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "ReadSession" : {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties" : {
+        "Description" : "WriteSession",
+        "PolicyDocument" : {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "WriteSession",
+              "Effect": "Allow",
+              "Action": [
+                  "s3:GetObject"
+              ],
+              "Resource": [
+                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-gator/sessions/*" ] ] }
+              ]
+            }
+          ]
+        }
+      }
     },
     "WriteGrants" : {
       "Type": "AWS::IAM::ManagedPolicy",
