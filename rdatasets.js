@@ -17,20 +17,20 @@ let get_valid_sets = function(grants,sets) {
   var valid_sets = [];
   // Filter metadata by the JWT permissions
   sets.map( set => {
-    let bits = set.split('/');
-    return { 'group_id' : bits[0], 'id' : bits[1] };
+    let bits = set.name.split('/');
+    return { 'group_id' : bits[0], 'id' : bits[1], 'rdata' : set.rdata };
   }).forEach(function(set) {
     let valid_prots = null;
     if (grants[set.group_id+'/'+set.id]) {
       valid_prots = grants[set.group_id+'/'+set.id];
-      if (valid_prots.filter(function(id) { return id === '*'; }).length > 0) {
-        valid_sets.push(set.id);
+      if (valid_prots.indexOf('*') === 0) {
+        valid_sets.push(set.rdata);
       }
     }
     if (grants[set.group_id+'/*']) {
       valid_prots = grants[set.group_id+'/*'];
-      if (valid_prots.filter(function(id) { return id === '*'; }).length > 0) {
-        valid_sets.push(set.id);
+      if (valid_prots.indexOf('*') === 0) {
+        valid_sets.push(set.rdata);
       }
     }
   });
@@ -40,11 +40,10 @@ let get_valid_sets = function(grants,sets) {
 const expand_resource = function expand_resource(methodarn,resources) {
   let method_base = methodarn.split('/').slice(0,2).join('/');
   let all_resources = [
-    method_base + `/POST/repository/src/contrib/PACKAGES`,
-    method_base + `/POST/repository/src/contrib/PACKAGES.gz`
+    method_base + '/POST/repository/src/contrib/PACKAGES'
   ];
   all_resources = all_resources.concat( resources.map( resource => {
-    return method_base + `/POST/repository/src/contrib/` + resource + '.tar.gz';
+    return method_base + '/POST/repository/src/contrib/' + resource;
   }) );
   return all_resources;
 };
@@ -66,11 +65,23 @@ const generatePolicyDocument = function generatePolicyDocument(principalId, effe
 
 exports.generatePolicyDocument = function(grants_promise,methodarn) {
   let dynamo = new AWS.DynamoDB.DocumentClient();
-  let datasetnames = dynamo.get({'TableName' : data_table, 'Key' : { 'acc' : 'metadata', 'dataset' : 'datasets' }}).promise().then( (data) => {
+  let datasetnames = dynamo.query({'TableName' : data_table,
+                                 'KeyConditionExpression' : 'acc = :acc',
+                                 'FilterExpression' : 'attribute_exists(rdata_file) AND size(group_ids) > :min_size',
+                                 'ProjectionExpression' : 'dataset,group_ids,rdata_file',
+                                  ExpressionAttributeValues: {
+                                    ':acc': 'metadata',
+                                    ':min_size' : 0
+                                  }
+                                  }).promise().then( (data) => {
     console.log('Populating data sets');
     let all_sets = [];
-    data.Item.sets.values.forEach( set => all_sets.push(set));
-    console.log('We have ',all_sets.length, 'sets in total');
+    data.Items.forEach( set => {
+      set.group_ids.values.map( group => `${group}/${set.dataset}` ).forEach( setname => {
+        all_sets.push({ name: setname, rdata: set.rdata_file });
+      });
+    });
+    console.log('We have ',all_sets.length, 'accessible sets in total with Rdata files');
     return all_sets;
   });
   return Promise.all([grants_promise,datasetnames]).then( (results) => {
