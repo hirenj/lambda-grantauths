@@ -15,6 +15,22 @@ try {
 
 let get_valid_sets = function(grants,sets) {
   var valid_sets = [];
+
+  var has_access = false;
+  var access_prefix = '';
+
+  if (grants['data-feature/full_rdata']) {
+    has_access = true;
+  }
+  if (! has_access && grants['data-feature/partial_rdata']) {
+    has_access = true;
+    access_prefix = 'partial_';
+  }
+
+  if ( ! has_access ) {
+    return [];
+  }
+
   // Filter metadata by the JWT permissions
   sets.map( set => {
     let bits = set.name.split('/');
@@ -24,13 +40,13 @@ let get_valid_sets = function(grants,sets) {
     if (grants[set.group_id+'/'+set.id]) {
       valid_prots = grants[set.group_id+'/'+set.id];
       if (valid_prots.indexOf('*') === 0) {
-        valid_sets.push(set.rdata);
+        valid_sets.push(access_prefix+set.rdata);
       }
     }
     if (grants[set.group_id+'/*']) {
       valid_prots = grants[set.group_id+'/*'];
       if (valid_prots.indexOf('*') === 0) {
-        valid_sets.push(set.rdata);
+        valid_sets.push(access_prefix+set.rdata);
       }
     }
   });
