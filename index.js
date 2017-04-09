@@ -553,10 +553,9 @@ exports.rdatasethandler = function(event,context) {
   let session_id = event.authorizationToken;
   get_session(session_id).then( token => {
     let payload = jwt.decode(token,{complete: true});
-    let get_userid = Promise.resolve(payload.sub || 'anonymous');
-    return Promise.all([get_userid,accept_token(token)]).then( promise_results => {
-      let user_id = promise_results[0];
-      return rdatasets.generatePolicyDocument(get_grant_token(user_id),event.methodArn);
+    let get_userid = Promise.resolve(payload.payload.sub || 'anonymous');
+    return Promise.all([get_userid,accept_token(token)]).then( () => {
+      return rdatasets.generatePolicyDocument(Promise.resolve(payload.payload),event.methodArn);
     });
   })
   .then( document => context.succeed(document) )
