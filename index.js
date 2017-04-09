@@ -72,15 +72,24 @@ var valid_microsoft_tennant = function(tennant_id) {
   });
 };
 
-const expand_resource = function(methodarn) {
+const expand_resource = function(methodarn,resource) {
   let method_base = methodarn.split('/').slice(0,2).join('/');
   let all_resources = [
     method_base + '/GET/data/latest/combined/*',
-    method_base + '/GET/data/latest/homology/*',
     method_base + '/GET/data/latest/uniprot/*',
     method_base + '/GET/metadata',
     method_base + '/GET/doi/*'
   ];
+  // We need to special case the grants for the
+  // data-feature grants, as they dont get accessed
+  // via the combined endpoint
+  Object.keys(resource)
+  .filter( sets => sets.indexOf('data-feature/') === 0 )
+  .map( set => set.replace('data-feature/','') )
+  .forEach(feature => {
+    all_resources.push( method_base + '/GET/data/latest/'+feature+'/*');
+  });
+
   return all_resources;
 };
 
