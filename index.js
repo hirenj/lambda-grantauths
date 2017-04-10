@@ -11,6 +11,8 @@ var jwt = require('jsonwebtoken');
 var jwkToPem = require('jwk-to-pem');
 var fs = require('fs');
 var AWS = require('lambda-helpers').AWS;
+const rdatasets = require('./rdatasets');
+const uuid = require('node-uuid');
 
 var grants_table = '';
 var pubkeys_table = '';
@@ -34,6 +36,7 @@ if (config.region) {
 const auth0_domain = process.env.AUTH0_DOMAIN;
 
 let dynamo = new AWS.DynamoDB();
+let s3 = new AWS.S3();
 
 var get_certificates = Promise.resolve({'keys' : []});
 
@@ -69,15 +72,24 @@ var valid_microsoft_tennant = function(tennant_id) {
   });
 };
 
-const expand_resource = function(methodarn) {
+const expand_resource = function(methodarn,resource) {
   let method_base = methodarn.split('/').slice(0,2).join('/');
   let all_resources = [
     method_base + '/GET/data/latest/combined/*',
-    method_base + '/GET/data/latest/homology/*',
     method_base + '/GET/data/latest/uniprot/*',
     method_base + '/GET/metadata',
     method_base + '/GET/doi/*'
   ];
+  // We need to special case the grants for the
+  // data-feature grants, as they dont get accessed
+  // via the combined endpoint
+  Object.keys(resource)
+  .filter( sets => sets.indexOf('data-feature/') === 0 )
+  .map( set => set.replace('data-feature/','') )
+  .forEach(feature => {
+    all_resources.push( method_base + '/GET/data/latest/'+feature+'/*');
+  });
+
   return all_resources;
 };
 
@@ -260,12 +272,32 @@ var get_grant_token = function(user_id,grantnames) {
   });
 };
 
+
+const upload_session = function(session_id,final_token) {
+  return s3.putObject({Bucket: bucket, Key: 'sessions/'+session_id, Body: final_token }).promise();
+};
+
+const get_session = function(session_id) {
+  return s3.getObject({Bucket: bucket, Key: 'sessions/'+session_id }).promise()
+  .then( result => result.Body.toString() );
+};
+
+const make_session_id = function(token_content) {
+  let session = uuid.v4();
+  token_content.session_id = session;
+  return token_content;
+};
+
 var get_signed_token = function(token_content) {
   return generate_signing_key().then(function(key) {
     return new Promise(function(resolve) {
       jwt.sign(token_content,key.private,{'algorithm' : 'RS256', 'headers' : { 'kid' : key.kid } }, function(token) {
-        resolve(token);
+        resolve({ id_token:token, session_id:token_content.session_id });
       });
+    })
+    .then( signed_token => {
+      return upload_session(signed_token.session_id, signed_token.id_token )
+      .then( () => signed_token );
     });
   });
 };
@@ -316,6 +348,8 @@ exports.exchangetoken = function exchangetoken(event,context) {
   }).then(token => {
     token.access.proteins = token.access.proteins.filter( (list) => list.length <= 10 );
     return token;
+  }).then(token => {
+    return make_session_id(token);
   }).then(get_signed_token);
 
   result.then(function(token) {
@@ -515,3 +549,19 @@ exports.loginhandler = function loginhandler(event, context){
   }
 };
 
+exports.rdatasethandler = function(event,context) {
+  let session_id = event.authorizationToken;
+  get_session(session_id).then( token => {
+    let payload = jwt.decode(token,{complete: true});
+    let get_userid = Promise.resolve(payload.payload.sub || 'anonymous');
+    return Promise.all([get_userid,accept_token(token)]).then( () => {
+      return rdatasets.generatePolicyDocument(Promise.resolve(payload.payload),event.methodArn);
+    });
+  })
+  .then( document => context.succeed(document) )
+  .catch( (err) => {
+    console.log(err);
+    console.log(err.stack);
+    context.fail('Unauthorized');
+  });
+};

@@ -56,14 +56,14 @@
               }
             ]
         },
-        "Roles" : [ { "Ref" : "LambdaExchangetokenRole" },{ "Ref" : "LambdaDatahandlerRole" },{ "Ref" : "LambdaLoginhandlerRole" }]
+        "Roles" : [ { "Ref" : "LambdaExchangetokenRole" },{ "Ref" : "LambdaDatahandlerRole" },{ "Ref" : "LambdaLoginhandlerRole" },{ "Ref" : "LambdaRdatasethandlerRole" }]
       },
-      "DependsOn" : ["LambdaExchangetokenRole","LambdaLoginhandlerRole","LambdaDatahandlerRole"]
+      "DependsOn" : ["LambdaExchangetokenRole","LambdaLoginhandlerRole","LambdaDatahandlerRole","LambdaRdatasethandlerRole"]
     },
     "LambdaExchangetokenRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"} ],
+        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"}, {"Ref" : "WriteSession"} ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -100,6 +100,24 @@
       "Type": "AWS::IAM::Role",
       "Properties": {
         "ManagedPolicyArns" : [],
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "LambdaRdatasethandlerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "ManagedPolicyArns" : [ {"Ref" : "ReadGrants"}, {"Ref" : "ReadDatasets"}, {"Ref" : "ReadSession"} ],
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -180,6 +198,28 @@
       },
       "DependsOn" : "LambdaLoginhandlerRole"
     },
+    "rdatasethandler" : {
+      "Type" : "AWS::Lambda::Function",
+      "Properties" : {
+        "Code" : {
+          "ZipFile": { "Fn::Join": ["", [
+            "exports.rdatasethandler = function(event, context) {",
+            "  context.succeed('OK');",
+            "};"
+          ]]}
+        },
+        "Description" : "rdatasethandler",
+        "Handler" : "index.rdatasethandler",
+        "Environment" : { "Variables" : {
+          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"}
+        }},
+        "Role" : {"Fn::GetAtt" : ["LambdaRdatasethandlerRole", "Arn"] },
+        "Runtime" : "nodejs4.3",
+        "MemorySize" : 128,
+        "Timeout" : 10
+      },
+      "DependsOn" : "LambdaRdatasethandlerRole"
+    },
     "ReadGrants" : {
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties" : {
@@ -200,6 +240,48 @@
         }
       },
       "DependsOn": "grants"
+    },
+    "WriteSession" : {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties" : {
+        "Description" : "WriteSession",
+        "PolicyDocument" : {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "WriteSession",
+              "Effect": "Allow",
+              "Action": [
+                  "s3:PutObject"
+              ],
+              "Resource": [
+                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-gator/sessions/*" ] ] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "ReadSession" : {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties" : {
+        "Description" : "WriteSession",
+        "PolicyDocument" : {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "WriteSession",
+              "Effect": "Allow",
+              "Action": [
+                  "s3:GetObject"
+              ],
+              "Resource": [
+                { "Fn::Join" :  [ "", [ "arn:aws:s3:::", { "Ref" : "AWS::StackName" }, "-gator/sessions/*" ] ] }
+              ]
+            }
+          ]
+        }
+      }
     },
     "WriteGrants" : {
       "Type": "AWS::IAM::ManagedPolicy",
