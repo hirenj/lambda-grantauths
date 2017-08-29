@@ -59,7 +59,7 @@ const expand_resource = function expand_resource(methodarn,resources) {
     method_base + '/POST/repository/src/contrib/PACKAGES'
   ];
   all_resources = all_resources.concat( resources.map( resource => {
-    return method_base + '/POST/repository/src/contrib/' + resource;
+    return method_base + '/POST/repository/src/contrib/' + resource + '*';
   }) );
   return all_resources;
 };
