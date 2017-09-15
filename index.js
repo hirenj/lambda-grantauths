@@ -176,7 +176,7 @@ var get_userid_from_token = function(authorization) {
     user_id = current_token.payload.email;
   }
   if (current_token.payload.iss === 'https://'+auth0_domain+'.auth0.com/') {
-    user_id = current_token.payload.email;
+    user_id = current_token.payload.email || current_token.payload['http://glycocode/email'];
   }
   if (current_token.payload.iss.match(/^https:\/\/login\.microsoftonline\.com\//)) {
     let valid_tennants = valid_microsoft_tennant(current_token.payload.tid);
