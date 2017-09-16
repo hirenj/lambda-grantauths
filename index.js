@@ -167,11 +167,11 @@ var get_userid_from_token = function(authorization) {
   }
 
   var current_token = jwt.decode(token[1],{complete: true});
+  let user_id = null;
 
   if (current_token.payload.iss == 'glycodomain') {
-    throw new Error('exchanged');
+    user_id = current_token.payload.sub;
   }
-  let user_id = null;
   if (current_token.payload.iss === 'accounts.google.com') {
     user_id = current_token.payload.email;
   }
@@ -332,7 +332,7 @@ exports.exchangetoken = function exchangetoken(event,context) {
   // Read the current JWT
 
   let get_userid = Promise.resolve(true).then(function() {
-    return get_userid_from_token(event.Authorization,context);
+    return get_userid_from_token(event.Authorization);
   });
 
   // Read the capabilities from the grants table for the user
@@ -347,6 +347,8 @@ exports.exchangetoken = function exchangetoken(event,context) {
     throw err;
   }).then(token => {
     token.access.proteins = token.access.proteins.filter( (list) => list.length <= 10 );
+    delete token.access;
+    delete token.grantnames;
     return token;
   }).then(token => {
     return make_session_id(token);
@@ -479,22 +481,12 @@ exports.datahandler = function datahandler(event,context) {
     // and the group ids for each of them
     // so that we can populate the grants
 
-    let decode_token = new Promise(function(resolve,reject) {
-      let val = null;
-      try {
-        val = jwt.decode(token[1]);
-      } catch(e) {
-        reject(new Error('Unauthorized'));
-      }
-      if (val) {
-        resolve(val.grantnames);
-      } else {
-        reject(new Error('Unauthorized'));
-      }
+    let get_userid = Promise.resolve(true).then(function() {
+      return get_userid_from_token(event.authorizationToken);
     });
 
     console.time('grant_token');
-    let grants_promise = decode_token.then(get_grant_token.bind(null,null)).then( (tok) => {
+    let grants_promise = get_userid.then(get_grant_token).then( (tok) => {
       console.timeEnd('grant_token');
       return tok;
     });
@@ -552,10 +544,12 @@ exports.loginhandler = function loginhandler(event, context){
 exports.rdatasethandler = function(event,context) {
   let session_id = event.authorizationToken;
   get_session(session_id).then( token => {
-    let payload = jwt.decode(token,{complete: true});
-    let get_userid = Promise.resolve(payload.payload.sub || 'anonymous');
-    return Promise.all([get_userid,accept_token(token)]).then( () => {
-      return rdatasets.generatePolicyDocument(Promise.resolve(payload.payload),event.methodArn);
+    let get_userid = Promise.resolve(true).then(function() {
+      return get_userid_from_token('Bearer '+token);
+    });
+    return Promise.all([get_userid,accept_token(token)]).then( (resolved) => {
+      let user_id = resolved[0];
+      return rdatasets.generatePolicyDocument(get_grant_token(user_id),event.methodArn);
     });
   })
   .then( document => context.succeed(document) )
