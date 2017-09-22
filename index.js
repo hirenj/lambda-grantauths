@@ -19,6 +19,8 @@ var pubkeys_table = '';
 
 var bucket = 'gator';
 
+var stack = 'test';
+
 let config = {};
 
 try {
@@ -26,6 +28,7 @@ try {
     pubkeys_table = config.tables.pubkeys;
     grants_table = config.tables.grants;
     bucket = config.buckets.dataBucket;
+    stack = config.stack;
 } catch (e) {
 }
 
@@ -33,7 +36,9 @@ if (config.region) {
   require('lambda-helpers').AWS.setRegion(config.region);
 }
 
-const auth0_domain = process.env.AUTH0_DOMAIN;
+const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN;
+const GOOGLE_ACCOUNTS_ENABLED = process.env.ENABLE_LOGIN_GOOGLE_ACCOUNTS || false;
+const AUTH0_API_IDENTIFIER = process.env.AUTH0_API_IDENTIFIER || `https://${stack}.glycocode.com`;
 
 let dynamo = new AWS.DynamoDB();
 let s3 = new AWS.S3();
@@ -172,10 +177,10 @@ var get_userid_from_token = function(authorization) {
   if (current_token.payload.iss == 'glycodomain') {
     user_id = current_token.payload.sub;
   }
-  if (current_token.payload.iss === 'accounts.google.com') {
+  if (GOOGLE_ACCOUNTS_ENABLED && current_token.payload.iss === 'accounts.google.com') {
     user_id = current_token.payload.email;
   }
-  if (current_token.payload.iss === 'https://'+auth0_domain+'.auth0.com/') {
+  if (current_token.payload.iss === 'https://'+AUTH0_DOMAIN+'.auth0.com/' && current_token.payload.aud === AUTH0_API_IDENTIFIER ) {
     user_id = current_token.payload.email || current_token.payload['http://glycocode/email'];
   }
   if (current_token.payload.iss.match(/^https:\/\/login\.microsoftonline\.com\//)) {
@@ -405,7 +410,7 @@ var accept_openid_connect_token = function(token) {
       console.log('LOGIN', data);
       // Restrict the functions to only the token exchange user
       return data;
-    } else if (data && data.iss && data.iss == 'https://'+auth0_domain+'.auth0.com/') {
+    } else if (data && data.iss && data.iss == 'https://'+AUTH0_DOMAIN+'.auth0.com/') {
       console.log('LOGIN', data);
       // Restrict the functions to only the token exchange user
       return data;

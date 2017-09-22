@@ -5,6 +5,16 @@
       "Type" : "String",
       "Default" : "",
       "Description" : "Auth0 domain for authentication (i.e. just 'example' from a domain of 'example.auth0.com')"
+    },
+    "ENABLELOGINGOOGLEACCOUNTS" : {
+      "Type": "String",
+      "Default" : "",
+      "Description" : "Enable data access using Google accounts"
+    },
+    "AUTH0APIIDENTIFIER" : {
+      "Type" : "String",
+      "Default" : "",
+      "Description" : "Audience / Resource server identifier to match for validating access tokens"
     }
   },
   "Resources": {
@@ -145,7 +155,10 @@
         "Description" : "exchangetoken",
         "Handler" : "index.exchangetoken",
         "Environment" : { "Variables" : {
-          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"}
+          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"},
+          "ENABLE_LOGIN_GOOGLE_ACCOUNTS" : {"Ref" : "ENABLELOGINGOOGLEACCOUNTS"},
+          "AUTH0_API_IDENTIFIER" : {"Ref" : "AUTH0APIIDENTIFIER"}
+
         }},
         "Role" : {"Fn::GetAtt" : ["LambdaExchangetokenRole", "Arn"] },
         "Runtime" : "nodejs4.3",
@@ -167,7 +180,9 @@
         "Description" : "datahandler",
         "Handler" : "index.datahandler",
         "Environment" : { "Variables" : {
-          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"}
+          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"},
+          "ENABLE_LOGIN_GOOGLE_ACCOUNTS" : {"Ref" : "ENABLELOGINGOOGLEACCOUNTS"},
+          "AUTH0_API_IDENTIFIER" : {"Ref" : "AUTH0APIIDENTIFIER"}
         }},
         "Role" : {"Fn::GetAtt" : ["LambdaDatahandlerRole", "Arn"] },
         "Runtime" : "nodejs4.3",
@@ -189,7 +204,9 @@
         "Description" : "loginhandler",
         "Handler" : "index.loginhandler",
         "Environment" : { "Variables" : {
-          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"}
+          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"},
+          "ENABLE_LOGIN_GOOGLE_ACCOUNTS" : {"Ref" : "ENABLELOGINGOOGLEACCOUNTS"},
+          "AUTH0_API_IDENTIFIER" : {"Ref" : "AUTH0APIIDENTIFIER"}
         }},
         "Role" : {"Fn::GetAtt" : ["LambdaLoginhandlerRole", "Arn"] },
         "Runtime" : "nodejs4.3",
@@ -211,7 +228,9 @@
         "Description" : "rdatasethandler",
         "Handler" : "index.rdatasethandler",
         "Environment" : { "Variables" : {
-          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"}
+          "AUTH0_DOMAIN" : {"Ref" : "AUTH0DOMAIN"},
+          "ENABLE_LOGIN_GOOGLE_ACCOUNTS" : {"Ref" : "ENABLELOGINGOOGLEACCOUNTS"},
+          "AUTH0_API_IDENTIFIER" : {"Ref" : "AUTH0APIIDENTIFIER"}
         }},
         "Role" : {"Fn::GetAtt" : ["LambdaRdatasethandlerRole", "Arn"] },
         "Runtime" : "nodejs4.3",
