@@ -180,7 +180,7 @@ var get_userid_from_token = function(authorization) {
   if (GOOGLE_ACCOUNTS_ENABLED && current_token.payload.iss === 'accounts.google.com') {
     user_id = current_token.payload.email;
   }
-  if (current_token.payload.iss === 'https://'+AUTH0_DOMAIN+'.auth0.com/' && current_token.payload.aud === AUTH0_API_IDENTIFIER ) {
+  if (current_token.payload.iss === 'https://'+AUTH0_DOMAIN+'.auth0.com/' && [].concat(current_token.payload.aud).indexOf(AUTH0_API_IDENTIFIER) >= 0 ) {
     user_id = current_token.payload.email || current_token.payload['http://glycocode/email'];
   }
   if (current_token.payload.iss.match(/^https:\/\/login\.microsoftonline\.com\//)) {
