@@ -339,8 +339,12 @@ var get_signed_token = function(token_content) {
 exports.exchangetoken = function exchangetoken(event,context) {
   // Read the current JWT
 
+  let scopes = '';
+
   let get_userid = Promise.resolve(true).then(function() {
-    return get_userid_from_token(event.Authorization);
+    let userinfo = get_userid_from_token(event.Authorization);
+    scopes = (userinfo.scopes || []).join(' ');
+    return userinfo;
   });
 
   // Read the capabilities from the grants table for the user
@@ -357,6 +361,7 @@ exports.exchangetoken = function exchangetoken(event,context) {
     token.access.proteins = token.access.proteins.filter( (list) => list.length <= 10 );
     delete token.access;
     delete token.grantnames;
+    token.scope = scopes;
     return token;
   }).then(token => {
     return make_session_id(token);
