@@ -163,7 +163,7 @@ var get_signing_key = function(key_id) {
 
 var get_userid_from_token = function(authorization) {
   if ( ! authorization ) {
-    return 'anonymous';
+    return { user: 'anonymous', scopes : [] };
   }
   let token = authorization.split(' ');
 
@@ -196,7 +196,7 @@ var get_userid_from_token = function(authorization) {
   if ( ! user_id ) {
     throw new Error('No valid token provider');
   }
-  return user_id;
+  return { user: user_id, scopes: (current_token.payload.scope || '').split(/[, ]/g) };
 };
 
 var copy_token = function(authorization) {
@@ -219,7 +219,11 @@ var copy_token = function(authorization) {
   return token_content;
 };
 
-var get_grant_token = function(user_id,grantnames) {
+var get_grant_token = function(userinfo) {
+
+  let user_id = userinfo.user;
+  let scopes = userinfo.scopes;
+
   if (user_id) {
     user_id = user_id.toLowerCase();
   }
@@ -236,14 +240,7 @@ var get_grant_token = function(user_id,grantnames) {
         ':anon' : { 'S' : 'anonymous'}
     }
   };
-  if ( ! user_id ) {
-    params = {};
-    params[grants_table] = {
-      'Keys' : grantnames.map( (grant) => { return { 'id' : {'S' : grant[0] }, 'valid_to' : {'N' : grant[1] } }; })
-    };
-    params = { 'RequestItems' : params };
-  }
-  let query_promise = (user_id ? dynamo.scan(params) : dynamo.batchGetItem(params) ).promise();
+  let query_promise = dynamo.scan(params).promise();
   return query_promise.then(function(data) {
     if ( ! data.Items && data.Responses ) {
       data.Items = data.Responses[grants_table];
@@ -260,6 +257,12 @@ var get_grant_token = function(user_id,grantnames) {
     data.Items.forEach(function(grant) {
       if (grant.valid_to.N < earliest_expiry ) {
         earliest_expiry = grant.valid_to.N;
+      }
+      if (grant.datasets.S.indexOf('data-feature/full_rdata') >= 0 && scopes.indexOf('download:all_data') < 0) {
+        return;
+      }
+      if (grant.datasets.S.indexOf('data-feature/partial_rdata') >= 0 && scopes.indexOf('download:subset_data') < 0) {
+        return;
       }
       sets.push({'protein' : grant.proteins.S, 'name' : grant.id.S, 'valid_to' : grant.valid_to.N, 'sets' : grant.datasets.S });
     });
