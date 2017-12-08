@@ -61,9 +61,6 @@ const expand_resource = function expand_resource(methodarn,resources) {
   all_resources = all_resources.concat( resources.map( resource => {
     return method_base + '/POST/repository/src/contrib/' + resource + '*';
   }) );
-  all_resources = all_resources.concat( resources.map( resource => {
-    return method_base + '/GET/repository/src/contrib/' + resource + '*';
-  }) );
   return all_resources;
 };
 
