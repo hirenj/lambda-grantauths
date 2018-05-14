@@ -83,6 +83,7 @@ const expand_resource = function(methodarn,resource) {
     method_base + '/GET/data/latest/combined/*',
     method_base + '/GET/data/latest/uniprot/*',
     method_base + '/GET/metadata',
+    method_base + '/GET/metadata/*',
     method_base + '/GET/doi/*'
   ];
   // We need to special case the grants for the
