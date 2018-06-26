@@ -161,7 +161,7 @@
 
         }},
         "Role" : {"Fn::GetAtt" : ["LambdaExchangetokenRole", "Arn"] },
-        "Runtime" : "nodejs4.3",
+        "Runtime" : "nodejs6.10",
         "MemorySize" : 128,
         "Timeout" : 20
       },
@@ -185,7 +185,7 @@
           "AUTH0_API_IDENTIFIER" : {"Ref" : "AUTH0APIIDENTIFIER"}
         }},
         "Role" : {"Fn::GetAtt" : ["LambdaDatahandlerRole", "Arn"] },
-        "Runtime" : "nodejs4.3",
+        "Runtime" : "nodejs6.10",
         "MemorySize" : 128,
         "Timeout" : 10
       },
@@ -209,7 +209,7 @@
           "AUTH0_API_IDENTIFIER" : {"Ref" : "AUTH0APIIDENTIFIER"}
         }},
         "Role" : {"Fn::GetAtt" : ["LambdaLoginhandlerRole", "Arn"] },
-        "Runtime" : "nodejs4.3",
+        "Runtime" : "nodejs6.10",
         "MemorySize" : 128,
         "Timeout" : 10
       },
@@ -233,7 +233,7 @@
           "AUTH0_API_IDENTIFIER" : {"Ref" : "AUTH0APIIDENTIFIER"}
         }},
         "Role" : {"Fn::GetAtt" : ["LambdaRdatasethandlerRole", "Arn"] },
-        "Runtime" : "nodejs4.3",
+        "Runtime" : "nodejs6.10",
         "MemorySize" : 128,
         "Timeout" : 10
       },
