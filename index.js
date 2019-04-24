@@ -84,6 +84,8 @@ const expand_resource = function(methodarn,resource) {
     method_base + '/GET/data/latest/uniprot/*',
     method_base + '/POST/data/latest',
     method_base + '/POST/data/latest/*',
+    method_base + '/GET/files',
+    method_base + '/GET/files/*',
     method_base + '/GET/metadata',
     method_base + '/GET/metadata/*',
     method_base + '/GET/doi/*'
