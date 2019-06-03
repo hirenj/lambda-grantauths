@@ -32,35 +32,13 @@ Resources:
       ProvisionedThroughput:
         ReadCapacityUnits: '1'
         WriteCapacityUnits: '1'
-  AuthLogWriterPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: AuthLogWriterPolicy
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: arn:aws:logs:*:*:*
-      Roles:
-        - !Ref 'LambdaExchangetokenRole'
-        - !Ref 'LambdaDatahandlerRole'
-        - !Ref 'LambdaLoginhandlerRole'
-        - !Ref 'LambdaRdatasethandlerRole'
-    DependsOn:
-      - LambdaExchangetokenRole
-      - LambdaLoginhandlerRole
-      - LambdaDatahandlerRole
-      - LambdaRdatasethandlerRole
   LambdaExchangetokenRole:
     Type: AWS::IAM::Role
     Properties:
       ManagedPolicyArns:
         - !Ref 'ReadGrants'
         - !Ref 'WriteSession'
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -73,6 +51,7 @@ Resources:
     Properties:
       ManagedPolicyArns:
         - !Ref 'ReadGrants'
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -83,7 +62,8 @@ Resources:
   LambdaLoginhandlerRole:
     Type: AWS::IAM::Role
     Properties:
-      ManagedPolicyArns: []
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -98,6 +78,7 @@ Resources:
         - !Ref 'ReadGrants'
         - !Ref 'ReadDatasets'
         - !Ref 'ReadSession'
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
