@@ -117,7 +117,7 @@ Resources:
           AUTH0_API_IDENTIFIER: !Ref 'AUTH0APIIDENTIFIER'
       Role: !GetAtt 'LambdaDatahandlerRole.Arn'
       Runtime: nodejs8.10
-      MemorySize: 128
+      MemorySize: 1024
       Timeout: 10
     DependsOn: LambdaDatahandlerRole
   loginhandler:
