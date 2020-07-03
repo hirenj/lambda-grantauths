@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kopertop/lambda-jwt.git"
+    "url": "git+https://github.com/hirenj/lambda-grantauths.git"
   },
   "keywords": [
     "Authentication",
@@ -19,12 +19,12 @@
     "Lambda",
     "AWS"
   ],
-  "author": "Chris Moyer <cmoyer@aci.info>",
+  "author": "Hiren Joshi <hirenj@gmail.com>",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/kopertop/lambda-jwt/issues"
+    "url": "https://github.com/hirenj/lambda-grantauths/issues"
   },
-  "homepage": "https://github.com/kopertop/lambda-jwt#readme",
+  "homepage": "https://github.com/hirenj/lambda-grantauths#readme",
   "dependencies": {
     "jsonwebtoken": "^5.5.4",
     "jwk-to-pem": "^1.2.5",
