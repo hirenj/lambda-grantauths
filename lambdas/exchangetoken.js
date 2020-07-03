@@ -1,0 +1,1 @@
+exports.exchangetoken = require('../js/common').exchangetoken;

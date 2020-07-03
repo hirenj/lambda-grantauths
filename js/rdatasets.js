@@ -8,7 +8,7 @@ var data_table = '';
 let config = {};
 
 try {
-    config = require('./resources.conf.json');
+    config = require('../resources.conf.json');
     data_table = config.tables.data;
 } catch (e) {
 }

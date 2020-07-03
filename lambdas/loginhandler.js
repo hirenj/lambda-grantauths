@@ -1,0 +1,1 @@
+exports.loginhandler = require('../js/common').loginhandler;

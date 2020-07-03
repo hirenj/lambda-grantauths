@@ -1,0 +1,1 @@
+exports.rdatasethandler = require('../js/common').rdatasethandler;

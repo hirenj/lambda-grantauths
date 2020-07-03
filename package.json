@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "lint": "./node_modules/jshint/bin/jshint index.js",
+    "lint": "node ./node_modules/jshint/bin/jshint index.js lambdas/*",
     "validate": "npm ls"
   },
   "repository": {
@@ -42,7 +42,8 @@
     "precommit-hook": "^3.0.0",
     "aws-sdk": "^2.7.21",
     "grunt-force-task": "^2.0.0",
-    "grunt-git-describe": "^2.4.2"
+    "grunt-git-describe": "^2.4.2",
+    "gator-webpack" : "hirenj/gator-webpack"
   },
   "pre-commit": [
     "lint"
