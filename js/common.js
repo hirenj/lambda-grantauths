@@ -60,6 +60,9 @@ let read_file = function(filename) {
 let retrieve_certs = function() {
   get_certificates = read_file('public_keys').then(function(result){
     return JSON.parse(result.toString());
+  }).catch( err => {
+    console.log('Error loading public keys');
+    return {};
   });
   return get_certificates;
 };
