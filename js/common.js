@@ -69,7 +69,7 @@ let retrieve_certs = function() {
 
 retrieve_certs();
 
-const tennants = JSON.parse(fs.readFileSync('tennants.json'));
+const tennants = require('../tennants.json');
 
 var valid_microsoft_tennant = function(tennant_id) {
   return Object.keys(tennants).filter(function(tennant) {
