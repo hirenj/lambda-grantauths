@@ -103,6 +103,25 @@ Resources:
       MemorySize: 128
       Timeout: 20
     DependsOn: LambdaExchangetokenRole
+  keepExchangetokenWarmRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Name: !<!Sub> 'keepExchangetokenWarmRule-${AWS::StackName}'
+      Description: Keep warm for exchangetoken
+      ScheduleExpression: rate(10 minutes)
+      State: !If [keepwarm, 'ENABLED', 'DISABLED']
+      Targets:
+        - Arn: !<!GetAtt> exchangetoken.Arn
+          Id: exchangetoken
+  keepExchangetokenWarmRulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt 'exchangetoken.Arn'
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/keepExchangetokenWarmRule-${AWS::StackName}'
+    Metadata:
+      Comment: Used to keep exchangetoken function warm
   datahandler:
     Type: AWS::Lambda::Function
     Properties:
